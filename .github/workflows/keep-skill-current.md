@@ -24,6 +24,9 @@ safe-outputs:
       - "skills/mixin-builder/SKILL.md"
   noop:
     report-as-issue: false
+imports:
+  - shared/engine-minimax.md
+  - shared/mcp.md
 ---
 
 # Keep the mixin-builder skill current
