@@ -34,6 +34,7 @@ runs-on-slim:
   - slim
 imports:
   - shared/engine-minimax.md
+  - shared/mcp.md
 ---
 
 # Keep the mixin-builder skill current
