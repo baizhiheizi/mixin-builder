@@ -335,6 +335,7 @@
         "KernelTransactionRequestCreateRequest",
         "RequestGhostRecipientsWithTraceId",
         "SendRawTransaction",
+        "SendTransaction",
         "SendTransactionUntilSufficient",
         "SendTransactionWithChangeOutputs",
         "SendTransactionWithOutputs",
