@@ -24,6 +24,14 @@ safe-outputs:
       - "skills/mixin-builder/SKILL.md"
   noop:
     report-as-issue: false
+runs-on:
+  - self-hosted
+  - linux
+  - agentic
+runs-on-slim:
+  - self-hosted
+  - linux
+  - slim
 imports:
   - shared/engine-minimax.md
   - shared/mcp.md
