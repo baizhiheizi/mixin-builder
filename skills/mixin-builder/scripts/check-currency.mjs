@@ -238,7 +238,7 @@ function checkScaffolds() {
 
 const flags = new Set(process.argv.slice(2));
 const update = flags.has("--update");
-const deep = flags.has("--deep");
+const deep = flags.has("--deep") || update; // --update must re-extract surfaces: a version-match early return would otherwise re-commit a stale/tampered baseline silently.
 let baseline = {};
 try { baseline = JSON.parse(fs.readFileSync(BASELINE, "utf8")); }
 catch { notes.push("no baseline.json — generating fresh (first run)"); }
