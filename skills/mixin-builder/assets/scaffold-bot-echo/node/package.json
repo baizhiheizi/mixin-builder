@@ -1,0 +1,12 @@
+{
+  "name": "scaffold-bot-echo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@mixin.dev/mixin-node-sdk": "^7.6.0"
+  }
+}

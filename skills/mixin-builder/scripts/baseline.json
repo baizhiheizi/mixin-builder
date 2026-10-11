@@ -1,0 +1,566 @@
+{
+  "generatedAt": "2026-10-11T09:44:43.805Z",
+  "go": {
+    "version": "v3.25.7",
+    "surface": {
+      "address.go": [
+        "Address",
+        "AddressInput",
+        "CheckAddress",
+        "CreateAddress",
+        "DeleteAddress",
+        "GetAddressesByAssetId",
+        "ReadAddress",
+        "SimpleAddress"
+      ],
+      "aes.go": [
+        "AesDecrypt",
+        "AesEncrypt"
+      ],
+      "app.go": [
+        "App",
+        "TransferAppOwnership",
+        "UpdateApp",
+        "UpdateAppInput"
+      ],
+      "asset.go": [
+        "Asset",
+        "AssetBalance",
+        "AssetBalanceWithSafeUser",
+        "AssetFee",
+        "AssetTicker",
+        "FetchAssets",
+        "ListAssetWithBalance",
+        "ListAssetWithBalanceByMembers",
+        "ListAssetWithBalanceByMembersHash",
+        "ReadAssetFee",
+        "ReadSafeFees",
+        "SafeFee",
+        "UserAssetBalance"
+      ],
+      "attachment.go": [
+        "Attachment",
+        "AttachmentShow",
+        "CreateAttachment"
+      ],
+      "auth.go": [
+        "OAuthGetAccessToken",
+        "ParseEd25519PrivateKey",
+        "SignAuthenticationToken",
+        "SignAuthenticationTokenWithRequestID",
+        "SignAuthenticationTokenWithoutBody",
+        "SignOauthAccessToken"
+      ],
+      "authenticator.go": [
+        "Authenticator",
+        "NewAuthenticator"
+      ],
+      "blaze.go": [
+        "AppButtonView",
+        "AppCardAction",
+        "AppCardView",
+        "BlazeClient",
+        "BlazeListener",
+        "BlazeMessage",
+        "MessageView",
+        "NewBlazeClient",
+        "NewBlazeClientWithSafeUser",
+        "SystemConversationPayload",
+        "TransferSafeView",
+        "TransferView"
+      ],
+      "botauth.go": [
+        "BotAuthCache",
+        "BotAuthClient",
+        "MapCache",
+        "NewBotAuthClient",
+        "NewDefaultClient",
+        "NewMapCache"
+      ],
+      "chain.go": [
+        "GetChainName",
+        "GetFullChains",
+        "IsChainId",
+        "NetworkChain",
+        "ReadNetworkChainById",
+        "ReadNetworkChains"
+      ],
+      "code.go": [
+        "Code",
+        "ReadCode",
+        "ReadMultisigByCode"
+      ],
+      "computer.go": [
+        "BuildSystemCallExtra",
+        "ComputerDeployExternalAsset",
+        "ComputerDeployedAsset",
+        "ComputerFeeResponse",
+        "ComputerInfoResponse",
+        "ComputerNonceAccount",
+        "ComputerNonceAccountResponse",
+        "ComputerSystemCall",
+        "ComputerSystemCallResponse",
+        "ComputerUserIDToBytes",
+        "ComputerUserResponse",
+        "DecodeComputerExtraBase64",
+        "EncodeMtgExtra",
+        "EncodeOperationMemo",
+        "GetComputerDeployedAssets",
+        "GetComputerInfo",
+        "GetComputerNonceAccounts",
+        "GetComputerSystemCall",
+        "GetComputerUser",
+        "GetFeeOnXINBasedOnSOL",
+        "LockComputerNonceAccount",
+        "RegisterComputer"
+      ],
+      "conversation.go": [
+        "Conversation",
+        "ConversationShow",
+        "ConversationShowByToken",
+        "CreateContactConversation",
+        "CreateGroupConversation",
+        "JoinConversation",
+        "Participant",
+        "ParticipantSessionView",
+        "RotateConversation",
+        "UpdateParticipants"
+      ],
+      "crypto.go": [
+        "HashMembers",
+        "PrivateKeyToCurve25519",
+        "PublicKeyToCurve25519",
+        "SharedKey"
+      ],
+      "error.go": [
+        "AuthorizationError",
+        "BadDataError",
+        "BlazeServerError",
+        "Error",
+        "ForbiddenError",
+        "NotFoundError",
+        "ServerError"
+      ],
+      "fiats.go": [
+        "Fiat",
+        "Fiats",
+        "GetFiats"
+      ],
+      "hash.go": [
+        "HmacSha1",
+        "HmacSha256"
+      ],
+      "inscription.go": [
+        "Collection",
+        "Inscription",
+        "InscriptionDeploy",
+        "InscriptionDistribute",
+        "InscriptionInscribe",
+        "InscriptionOccupy",
+        "ReadCollection",
+        "ReadCollectionItems",
+        "ReadInscription",
+        "Treasury"
+      ],
+      "invoice.go": [
+        "InvoiceEntry",
+        "MixinInvoice",
+        "NewMixinInvoice",
+        "NewMixinInvoiceFromString"
+      ],
+      "kernel.go": [
+        "CallKernelRPC"
+      ],
+      "kernel_tx.go": [
+        "SendKernelTransactionFromAccount"
+      ],
+      "legacy_user.go": [
+        "KeystoreLegacy",
+        "UpgradeLegacyUser",
+        "UserUpgrade"
+      ],
+      "message.go": [
+        "DecryptMessageData",
+        "EncryptMessageData",
+        "EncryptedMessageError",
+        "EncryptedMessageResponse",
+        "ImageMessagePayload",
+        "LiveMessagePayload",
+        "MessageRequest",
+        "PostAcknowledgements",
+        "PostEncryptedMessages",
+        "PostMessage",
+        "PostMessageRequest",
+        "PostMessages",
+        "RecallMessagePayload",
+        "ReceiptAcknowledgementRequest"
+      ],
+      "mix.go": [
+        "MixAddress",
+        "NewMainnetMixAddress",
+        "NewMixAddressFromBytesUnchecked",
+        "NewMixAddressFromString",
+        "NewUUIDMixAddress"
+      ],
+      "multisigs.go": [
+        "CancelMultisig",
+        "CreateMultisig",
+        "MultisigRequest",
+        "MultisigUTXO",
+        "ReadMultisigs",
+        "ReadMultisigsLegacy",
+        "SignMultisig",
+        "UnlockMultisig"
+      ],
+      "network.go": [
+        "AssetNetwork",
+        "ReadNetworkAssets",
+        "ReadNetworkAssetsTop"
+      ],
+      "network_asset.go": [
+        "AssetSearch",
+        "ReadAsset",
+        "ReadAssetTicker",
+        "ReadAssetTickerWithOffset"
+      ],
+      "object.go": [
+        "CreateObjectStorageTransaction",
+        "EstimateStorageCost",
+        "StorageRecipient"
+      ],
+      "output.go": [
+        "GetOutput",
+        "KernelDepositView",
+        "ListOutputs",
+        "ListOutputsByToken",
+        "ListUnspentOutputs",
+        "ListUnspentOutputsByToken",
+        "Output"
+      ],
+      "pin.go": [
+        "EncryptEd25519PIN",
+        "VerifyPIN",
+        "VerifyPINTip"
+      ],
+      "request.go": [
+        "Request",
+        "RequestWithId",
+        "SetBaseUri",
+        "SetBlazeUri",
+        "SetDebug",
+        "SetHttpTimeout",
+        "SetUserAgent",
+        "SimpleRequest",
+        "WithAPIKey"
+      ],
+      "safe.go": [
+        "GhostKeyRequest",
+        "GhostKeys",
+        "NewSafeUser",
+        "RequestSafeGhostKeys",
+        "SafeUser"
+      ],
+      "safe_deposit_entries.go": [
+        "CreateDepositEntry",
+        "DepositEntryView"
+      ],
+      "safe_deposits.go": [
+        "FetchPendingSafeDeposits",
+        "SafeDepositPending"
+      ],
+      "safe_multisigs.go": [
+        "CreateMultisigRawTx",
+        "CreateSafeMultisigRequest",
+        "FetchSafeMultisigRequest",
+        "OutputReceiverView",
+        "SafeMultisigRequest"
+      ],
+      "safe_user.go": [
+        "RegisterSafe",
+        "RegisterSafeBareUser",
+        "RegisterSafeWithSetupPin"
+      ],
+      "session.go": [
+        "FetchUserSessions",
+        "MapSessionStore",
+        "NewMapSessionStore",
+        "SessionStore",
+        "UserSession"
+      ],
+      "snapshot.go": [
+        "MessageWithSession",
+        "SafeDepositView",
+        "SafeNotifySnapshot",
+        "SafeSnapshot",
+        "SafeSnapshotById",
+        "SafeSnapshotByToken",
+        "SafeSnapshots",
+        "SafeSnapshotsByToken",
+        "SafeWithdrawalView"
+      ],
+      "snapshot_legacy.go": [
+        "LegacySnapshot",
+        "LegacySnapshotShort",
+        "NetworkSnapshot",
+        "NetworkSnapshotByToken",
+        "NetworkSnapshots",
+        "NetworkSnapshotsByToken",
+        "SnapshotById",
+        "SnapshotByToken",
+        "SnapshotByTraceId",
+        "Snapshots",
+        "SnapshotsByToken"
+      ],
+      "tip.go": [
+        "GetTipNodeByPath",
+        "GetTipNodeByPathWithRequestId",
+        "TIPBodyForSequencerRegister",
+        "TIPBodyForVerify",
+        "TIPMigrateBody",
+        "TipBody",
+        "TipBodyForAddressAdd",
+        "TipBodyForEmergencyContactCreate",
+        "TipBodyForOwnershipTransfer",
+        "TipBodyForPhoneNumberUpdate",
+        "TipBodyForProvisioningUpdate",
+        "TipBodyForRawTransactionCreate",
+        "TipBodyForTransfer",
+        "TipBodyForWithdrawalCreate",
+        "TipNodeData"
+      ],
+      "transaction.go": [
+        "BuildRawTransaction",
+        "GetTransactionById",
+        "GetTransactionByIdWithSafeUser",
+        "KernelTransactionRequestCreateRequest",
+        "RequestGhostRecipientsWithTraceId",
+        "SendRawTransaction",
+        "SendTransactionUntilSufficient",
+        "SendTransactionWithChangeOutputs",
+        "SendTransactionWithOutputs",
+        "SendTransactionWithUtxosAndChangeOutputs",
+        "SendTransferTransaction",
+        "SendTransferTransactionWithOutputs",
+        "SequencerTransactionRequest",
+        "TransactionReceiver",
+        "TransactionRecipient",
+        "UtxoInsufficientError",
+        "VerifyRawTransaction"
+      ],
+      "transport.go": [
+        "NewTransport"
+      ],
+      "turn.go": [
+        "GetTurnServer",
+        "Turn"
+      ],
+      "url_scheme.go": [
+        "SchemeApps",
+        "SchemeCodes",
+        "SchemeConversations",
+        "SchemePay",
+        "SchemeSend",
+        "SchemeSnapshots",
+        "SchemeTransfer",
+        "SchemeUsers",
+        "SendSchemeCategory"
+      ],
+      "user.go": [
+        "CreateUser",
+        "CreateUserSimple",
+        "GenerateUserChecksum",
+        "GetUser",
+        "GetUsers",
+        "Membership",
+        "Relationship",
+        "RequestUserMe",
+        "SearchUser",
+        "Session",
+        "UpdatePin",
+        "UpdatePreference",
+        "UpdateTipPin",
+        "UpdateUserMe",
+        "User",
+        "UserMe",
+        "UserMeView",
+        "UserMeWithRequestID"
+      ],
+      "utils.go": [
+        "Chunked",
+        "GroupConversationId",
+        "MakeUniqueStringSlice",
+        "UniqueConversationId",
+        "UniqueObjectId"
+      ],
+      "uuid.go": [
+        "UuidFromBytes",
+        "UuidFromString",
+        "UuidNewV4"
+      ],
+      "withdrawal.go": [
+        "SendWithdrawal",
+        "WithdrawalWithUtxos"
+      ]
+    }
+  },
+  "node": {
+    "version": "7.6.0",
+    "surface": [
+      "AddressClient",
+      "AppClient",
+      "AssetClient",
+      "AttachmentClient",
+      "BlazeKeystoreClient",
+      "CircleClient",
+      "CodeClient",
+      "CollectibleClient",
+      "ConversationClient",
+      "Decoder",
+      "DefaultChain",
+      "DefaultClass",
+      "DefaultNftAssetId",
+      "Encoder",
+      "ExternalClient",
+      "ExtraSizeGeneralLimit",
+      "ExtraSizeStorageCapacity",
+      "ExtraSizeStorageStep",
+      "ExtraStoragePriceStep",
+      "GroupMembers",
+      "GroupThreshold",
+      "InscriptionModeDone",
+      "InscriptionModeInstant",
+      "KeystoreClient",
+      "MAX_SOLANA_TX_SIZE",
+      "MainAddressPrefix",
+      "MessageClient",
+      "MintMinimumCost",
+      "MixAddressPrefix",
+      "MixAddressVersion",
+      "MixinApi",
+      "MixinAssetID",
+      "MixinCashier",
+      "MixinInvoicePrefix",
+      "MixinInvoiceVersion",
+      "MultisigClient",
+      "NetworkClient",
+      "OAuthClient",
+      "OperationTypeAddUser",
+      "OperationTypeSystemCall",
+      "OperationTypeUserDeposit",
+      "OutputTypeScript",
+      "OutputTypeWithdrawalSubmit",
+      "PaymentClient",
+      "PinClient",
+      "ReferencesCountLimit",
+      "ResponseError",
+      "SafeClient",
+      "TIPBodyForSequencerRegister",
+      "TransferClient",
+      "TxVersion",
+      "TxVersionHashSignature",
+      "UserClient",
+      "UtxoClient",
+      "WebViewApi",
+      "XINAssetID",
+      "attachInvoiceEntry",
+      "attachStorageEntry",
+      "base64RawURLDecode",
+      "base64RawURLEncode",
+      "bigNumberToBytes",
+      "blake3Hash",
+      "buildClient",
+      "buildCollectibleMemo",
+      "buildComputerExtra",
+      "buildInscriptionOperationExtra",
+      "buildMixAddress",
+      "buildMixinOneSafePaymentUri",
+      "buildMultiSigsTransaction",
+      "buildNfoTransferRequest",
+      "buildSafeTransaction",
+      "buildSafeTransactionRecipient",
+      "buildSystemCallExtra",
+      "buildTokenId",
+      "bytesToInterger",
+      "checkSystemCallSize",
+      "createAxiosClient",
+      "createRequestClient",
+      "decodeInscriptionOperationExtra",
+      "decodeMessage",
+      "decodeNfoMemo",
+      "decodeSafeTransaction",
+      "deriveGhostPublicKey",
+      "edwards25519",
+      "encodeMtgExtra",
+      "encodeSafeTransaction",
+      "encodeScript",
+      "encodeTx",
+      "estimateStorageCost",
+      "formatUnits",
+      "getChallenge",
+      "getCreateAddressTipBody",
+      "getED25519KeyPair",
+      "getInscriptionOutput",
+      "getInvoiceBuffer",
+      "getInvoiceString",
+      "getKeyPair",
+      "getMainnetAddressFromPublic",
+      "getMainnetAddressFromSeed",
+      "getMixAddressBuffer",
+      "getMixAddressStringFromBuffer",
+      "getNanoTime",
+      "getOwnershipTransferTipBody",
+      "getPublicFromMainnetAddress",
+      "getRandomBytes",
+      "getRecipientForStorage",
+      "getRemoveAddressTipBody",
+      "getTipPinUpdateMsg",
+      "getTotalBalanceFromOutputs",
+      "getUnspentOutputsForRecipients",
+      "getUuid",
+      "getVerifyPinTipBody",
+      "hashMembers",
+      "integerToBytes",
+      "isStorageEntry",
+      "magic",
+      "newHash",
+      "newKeyFromSeed",
+      "newMixinInvoice",
+      "parseMixAddress",
+      "parseMixinInvoice",
+      "parseUnits",
+      "publicFromPrivate",
+      "putUvarInt",
+      "sendRaw",
+      "sha256Hash",
+      "sha512Hash",
+      "sharedEd25519Key",
+      "sign",
+      "signAccessToken",
+      "signAuthenticationToken",
+      "signEd25519PIN",
+      "signOauthAccessToken",
+      "signSafeRegistration",
+      "signSafeTransaction",
+      "signTipBody",
+      "signToken",
+      "sleep",
+      "tipBody",
+      "transferInscription",
+      "uniqueConversationID",
+      "userIdToBytes",
+      "websocket"
+    ]
+  },
+  "ruby": {
+    "version": "3.0.2"
+  },
+  "docs": {
+    "version": "2026-10-05T01:43:18Z"
+  },
+  "computer": {
+    "version": "v0.9.1-a37afa3",
+    "members": 7,
+    "threshold": 5,
+    "operation_price": "0.001"
+  }
+}

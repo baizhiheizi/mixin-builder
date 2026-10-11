@@ -1,0 +1,28 @@
+{
+  "name": "mixin-builder",
+  "version": "0.1.0",
+  "description": "One deep agent skill for building on the Mixin Network — bots, OAuth web apps, Safe payments & custody, Mixin Computer (Solana), MTG trusted groups. Protocol truth over SDK transcripts.",
+  "license": "MIT",
+  "keywords": [
+    "mixin",
+    "agent-skills",
+    "claude-skills",
+    "blaze",
+    "mixin-safe",
+    "mtg",
+    "mixin-computer",
+    "mvm"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baizhiheizi/mixin-builder.git"
+  },
+  "files": [
+    "skills/**",
+    "README.md"
+  ],
+  "scripts": {
+    "check:currency": "node skills/mixin-builder/scripts/check-currency.mjs",
+    "probe": "node skills/mixin-builder/scripts/probe.mjs"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "scaffold-payment-watcher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mixin payment watcher — Blaze trigger + snapshot reconciliation, credit-once via sqlite",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node watcher.mjs"
+  },
+  "dependencies": {
+    "@mixin.dev/mixin-node-sdk": "^7.6.0"
+  }
+}

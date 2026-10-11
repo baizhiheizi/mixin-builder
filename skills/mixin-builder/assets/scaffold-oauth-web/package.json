@@ -1,0 +1,11 @@
+{
+  "name": "scaffold-oauth-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mixin OAuth backend client_secret flow — zero runtime dependencies, Node >= 20",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}
