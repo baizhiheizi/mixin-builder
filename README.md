@@ -41,6 +41,22 @@ node skills/mixin-builder/scripts/probe.mjs me --keystore ks.json
 node skills/mixin-builder/scripts/probe.mjs outputs --keystore ks.json
 ```
 
+## Manage a bot wallet without writing code
+
+No scaffolds, no SDK knowledge. Install the skill into your agent (Claude Code, Codex, any skills-compatible agent), then just talk to it.
+
+You need one file: the bot's `keystore.json`, from the [developer dashboard](https://developers.mixin.one) where you created the bot. Keep it private — whoever holds its `spend_private_key` holds the money.
+
+Prompts like these work as-is; the skill routes the agent to the right reference and rails:
+
+| You say | What the agent does |
+|---|---|
+| "My keystore is at `~/keystores/my-bot.json`. What's my bot's balance?" | Runs `scripts/probe.mjs me` (registration state) and `outputs` (unspent UTXOs summed per asset — Mixin has no balance field). Read-only: the spend key is never read. |
+| "Send 0.01 BTC to `bc1q…`" | Follows `references/payments.md`: decimal-string amount, stable `trace_id`, verifies the raw transaction for free via `/safe/transaction/requests`, only signs after you confirm, then polls to `spent` and shows you the snapshot as proof. |
+| "Has anyone paid the bot since yesterday?" | Walks snapshots per `references/reconciliation.md`: payer, asset, amount, trace — deduplicated on trace IDs. |
+
+Sending requires the bot to be Sequencer-registered; if `probe.mjs me` says it isn't, the agent walks you through it via `references/identity-and-keys.md`.
+
 ## What it covers
 
 | Domain | Reference | Highlights |
