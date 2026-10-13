@@ -32,6 +32,15 @@ Each rail exists because skipping it loses money or floods the network. Expanded
 4. **Read or dry-run before you sign.** List outputs, quote fees, verify the raw transaction (`/safe/transaction/requests`) before submitting. Verification is free; signing is not.
 5. **Validate withdrawal destinations yourself, per chain, before signing.** Wrong-chain or malformed destinations = permanently lost funds (`30102` is your last warning, not your first line of defense).
 6. **ACK every Blaze frame you process — and only after processing.** Un-acked frames are re-delivered (handlers must be idempotent on `message_id`); never acking gets your IP blocked by the gateway.
+7. **Agent rule: never broadcast a money-moving transaction the user hasn't confirmed.** Before signing, show asset (symbol **and** `asset_id`/chain), amount, destination and trace, and wait for an explicit yes. Read-only work (probes, listing outputs, verify-only dry-runs) needs no confirmation.
+
+## First hour on a new project
+
+1. **Get the keystore** from the developer dashboard (`developers.mixin.one` → app → Secret). Check which format it is: legacy `client_id`/`private_key`/`pin_token`, or Safe-era `app_id`/`session_private_key`/`server_public_key`/`spend_private_key` (→ `identity-and-keys.md` § Keystore formats).
+2. **Probe before coding**: `node scripts/probe.mjs me --keystore ks.json` shows whether auth works and whether the app is Sequencer-registered. `probe.mjs outputs` gives exact balances per `asset_id`. All probes are read-only.
+3. **Not registered?** You can receive messages but not send money: TIP migrate, then register (`identity-and-keys.md` § TIP PIN, § Sequencer registration).
+4. **Start from a scaffold** (`assets/`): echo bot (Go/Node/Ruby), OAuth web login, payment watcher. Use a second "test" app for development, never the production keystore.
+5. **Pin `asset_id`s, not symbols**: "USDT" is several assets on several chains (`concepts.md` § Asset model).
 
 ## Task routing
 
@@ -40,11 +49,14 @@ Each rail exists because skipping it loses money or floods the network. Expanded
 | "explain Mixin / coming from EVM, Telegram bots, fintech" | `concepts.md` | — |
 | Create a bot, send messages, cards, groups, attachments | `messaging.md`, `blaze.md` | `assets/scaffold-bot-echo/` |
 | Bot reconnect storm, duplicate messages, WS flooding | `blaze.md`, `gotchas.md` | — |
-| Accept payments, credit users | `payments.md` (§ receiving), `reconciliation.md` | `assets/scaffold-payment-watcher/` |
+| Accept payments, credit users | `payments.md` § Receiving money, `reconciliation.md` | `assets/scaffold-payment-watcher/` |
+| Charge for an order, match payment → order, under/over-pay, refunds | `reconciliation.md` § Order payments, `schemas.md` §2 | `assets/scaffold-payment-watcher/` |
+| "Which asset_id is USDT / on which chain?", dust minimums, memo-required chains | `concepts.md` § Asset model | — |
+| "What's my bot's balance / is it registered?" | `payments.md` § UTXO model | `scripts/probe.mjs me`, `outputs`, `snapshots` |
 | Send transfers, multisig, withdrawals (fees!), inscriptions | `payments.md` | — |
-| "why is my balance wrong" / UTXO dust / consolidation | `payments.md` §6, `gotchas.md` | — |
+| "why is my balance wrong" / UTXO dust / consolidation | `payments.md` § Dust & consolidation, `gotchas.md` | `scripts/probe.mjs outputs` |
 | Mixin login for a web app (OAuth, PKCE, scopes) | `identity-and-keys.md` | `assets/scaffold-oauth-web/` |
-| Keystore anatomy, keys, TIP PIN, Sequencer registration, sub-accounts | `identity-and-keys.md` | — |
+| Keystore anatomy/formats, keys, TIP PIN, Sequencer registration, sub-accounts, 401 on first call | `identity-and-keys.md` | `scripts/probe.mjs me` |
 | Key leaked / custody / backups / testing / deploy / rate limits | `custody-and-ops.md` | — |
 | Ledger reconciliation, credit-once, cursors, monitoring | `reconciliation.md` | `assets/scaffold-payment-watcher/` |
 | Solana through Mixin (Computer/MVM): register user, system calls, fees, nonces | `computer.md` | — |
@@ -67,13 +79,13 @@ Mixin skills historically died by inventing SDK symbols (~25 fabricated Go funct
 
 Verified against (full matrix + re-verify steps: `references/compatibility.md`):
 
-- Go `bot-api-go-client/v3` **v3.25.7** · Node `@mixin.dev/mixin-node-sdk` **7.6.0** · Ruby `mixin_bot` **3.0.2** · docs repo HEAD pushed **2026-10-05** · `computer.mixin.one` **v0.9.1** (7 members / threshold 5, registration 0.001 XIN) — all checked **2026-10-11**.
+- Go `bot-api-go-client/v3` **v3.25.7** · Node `@mixin.dev/mixin-node-sdk` **7.6.0** · Ruby `mixin_bot` **3.0.2** · docs content last changed **2026-08-02** · `computer.mixin.one` **v0.9.1** (7 members / threshold 5, registration 0.001 XIN) — all checked **2026-10-11**.
 
 Before relying on SDK specifics (or if anything here contradicts the installed SDK), run:
 
 ```bash
 node scripts/check-currency.mjs   # latest versions + export diff + scaffold checks; nonzero exit = drift
-node scripts/probe.mjs            # read-only live probes: /me, outputs, computer info
+node scripts/probe.mjs            # read-only live probes: me, outputs, snapshots, computer
 ```
 
 Ephemeral facts (prices, fees, computer params) are probed at use time, never copied from prose.

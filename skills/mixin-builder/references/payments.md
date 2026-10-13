@@ -10,6 +10,7 @@ Quick map:
 |---|---|---|
 | Show a balance | UTXO model | Go `ListAssetWithBalance` / Node `client.utxo.safeAssetBalance` |
 | Get paid by users | Receiving | pay URI or direct transfer + snapshot watcher |
+| Charge for an order (match payment → order, refunds) | → reconciliation.md § Order payments | per-order `trace` in the pay link, match snapshot `request_id` |
 | Accept on-chain crypto | Receiving | deposit entries + pending-deposits poll |
 | Send / fan out | Sending | Go `SendTransaction` / Node manual chain / Ruby `create_transfer` |
 | Require approvals | Multisig | `POST /safe/multisigs` + signers |
@@ -104,7 +105,7 @@ Group balances: same endpoint with the group's members hash + threshold — depo
 
 Three doors, all landing in snapshots (→ reconciliation.md for credit-once patterns and cursor management):
 
-**(a) Direct transfer to the bot.** The payer sends to your `user_id` or your 1-of-1 `MIX` address — same thing (Go `NewUUIDMixAddress([]string{botId}, 1)`, Node `buildMixAddress({members:[botId], threshold:1})`, Ruby `MixinBot::MixAddress`). Nothing to configure. Detect via Blaze `SYSTEM_SAFE_SNAPSHOT` frames (→ blaze.md) or poll `GET /safe/snapshots` (Go `SafeSnapshots(ctx, limit, app, assetId, opponent, offset, su)` — `offset` is `created_at` ISO8601, not a sequence; Node `client.safe.fetchSafeSnapshots({asset?, opponent?, offset?, limit?, order?})`; Ruby `safe_snapshots`). Snapshot fields (go: snapshot.go v3.25.7): `snapshot_id`, `user_id`, `opponent_id`, `amount` (**negative = you sent**), `memo`, `request_id` (= trace), `transaction_hash`, `asset_id`, `created_at`, `type`, plus `deposit`/`withdrawal` views. If the payer's wallet errors `10404`, *you* haven't registered with the Sequencer yet (docs: api/sequencer/client-integration.md).
+**(a) Direct transfer to the bot.** The payer sends to your `user_id` or your 1-of-1 `MIX` address — same thing (Go `NewUUIDMixAddress([]string{botId}, 1)`, Node `buildMixAddress({members:[botId], threshold:1})`, Ruby `MixinBot::MixAddress`). Nothing to configure. Detect via Blaze `SYSTEM_SAFE_SNAPSHOT` frames (→ blaze.md) or poll `GET /safe/snapshots` (Go `SafeSnapshots(ctx, limit, app, assetId, opponent, offset, su)` — `offset` is `created_at` ISO8601, not a sequence; Node `client.safe.fetchSafeSnapshots({app?, asset?, opponent?, offset?, limit?})` (no `order` in the TS type — paging rules → reconciliation.md § Cursor management); Ruby `safe_snapshots`). Snapshot fields (go: snapshot.go v3.25.7): `snapshot_id`, `user_id`, `opponent_id`, `amount` (**negative = you sent**), `memo`, `request_id` (= trace), `transaction_hash`, `asset_id`, `created_at`, `type`, plus `deposit`/`withdrawal` views. If the payer's wallet errors `10404`, *you* haven't registered with the Sequencer yet (docs: api/sequencer/client-integration.md).
 
 Incoming snapshot, abbreviated:
 
@@ -115,7 +116,7 @@ Incoming snapshot, abbreviated:
           "created_at": "RFC3339NANO", "deposit": null, "withdrawal": null}}
 ```
 
-**(b) User-initiated taps: pay URI / MIN invoice.** Render a `mixin.one` pay URI or a multi-entry `MIN...` invoice in the user's wallet UI; they confirm, you get one snapshot per entry. Spec, encoding and limits (per-entry memo ≤ 256 B, references ≤ 32) → schemas.md. Builders: Node `buildMixinOneSafePaymentUri(params)` (destination = uuid / XIN mainnet address / MIX address / members+threshold), `newMixinInvoice(recipient)` + `attachInvoiceEntry`; Go `NewMixinInvoice(recipientMixAddr)` + `.Encode()`, `SchemePay(assetId, traceId, recipientId, memo, amount)`; Ruby `MixinBot::Invoice`.
+**(b) User-initiated taps: pay URI / MIN invoice.** Render a `mixin.one` pay URI or a multi-entry `MIN...` invoice in the user's wallet UI; they confirm, you get one snapshot per entry, whose `request_id` is the `trace` you put in the link. That is how you tie a payment to an order (full recipe with under/over-pay and refunds → reconciliation.md § Order payments). Spec, encoding and limits (per-entry memo ≤ 256 B, references ≤ 32) → schemas.md. Builders: Node `buildMixinOneSafePaymentUri(params)` (destination = uuid / XIN mainnet address / MIX address / members+threshold), `newMixinInvoice(recipient)` + `attachInvoiceEntry`; Go `NewMixinInvoice(recipientMixAddr)` + `.Encode()`, `SchemePay(assetId, traceId, recipientId, memo, amount)`; Ruby `MixinBot::Invoice`.
 
 **(c) On-chain deposits.** Request a deposit entry once per (members, threshold, chain):
 
@@ -335,7 +336,7 @@ Symptoms (any of):
 
 Fixes:
 
-- **Periodic self-transfer consolidation**: `SendTransaction` to your own 1-of-1 `MIX` address sweeps N dust UTXOs into one output. The Go SDK never grew a consolidation helper (open request since 2025-07) — schedule it yourself (charter research 2026-10):
+- **Periodic self-transfer consolidation**: `SendTransaction` to your own 1-of-1 `MIX` address sweeps N dust UTXOs into one output. The Go SDK never grew a consolidation helper (open request since 2025-07) — schedule it yourself:
 
 ```go
 rec := &bot.TransactionRecipient{MixAddress: bot.NewUUIDMixAddress([]string{su.UserId}, 1), Amount: total}
@@ -410,4 +411,4 @@ Payments monitoring should ride snapshots, not balance polling: → reconciliati
 - node: @mixin.dev/mixin-node-sdk 7.6.0 — dist/index.d.ts, dist/index.js (safe-tx helpers, endpoints, constants, inscription/storage)
 - ruby: mixin_bot 3.0.2 README (2026-10-09)
 - kernel: MixinNetwork/mixin common/transaction.go (master, fetched 2026-10-11) — `SliceCountLimit=256`, `ReferencesCountLimit=16`, `ExtraSizeGeneralLimit=256`, `ExtraSizeStorageStep=1024`, `ExtraSizeStorageCapacity=4 MiB`, `ExtraStoragePriceStep="0.0001"`, `OutputTypeScript=0x00`, `OutputTypeWithdrawalSubmit=0xa1`, `TxVersionHashSignature=0x05`
-- charter research (open Go SDK issues: consolidation 2025-07, fee-UTXO assignment 2026-08): /home/an-lee/Projects/mixin-builder/README.md
+- github.com/MixinNetwork/bot-api-go-client issues (open as of 2026-10: consolidation helper request 2025-07, fee-UTXO assignment 2026-08)

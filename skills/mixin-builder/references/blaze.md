@@ -97,7 +97,7 @@ Rule of thumb: duplicate messages at steady rate = missing/wrong acks, not user 
 - **Decode explicitly**: Go's `OnMessage` hands you `MessageView.DataBase64` — it does NOT base64-decode or JSON-parse for you. Node decodes only with `parse: true`. Ruby yields raw params per `blaze_handler`.
 - **Dispatch on `category`**, switch on the PLAIN_/APP_/SYSTEM_ families; ignore unknown categories forward-compatibly.
 - **Offload heavy work**: the Go read loop is synchronous — a slow `OnMessage` blocks the entire socket (read deadline is 10s; parseMessage times out pushing to `readBuffer` after 3s). Push to a durable queue and ack when enqueued-or-processed per your policy; never run HTTP fan-out, LLM calls, or tx building inline in the handler.
-- **Rate-shape replies**: answering N queued messages instantly after reconnect hammers `POST /messages`; drain your reply queue with pacing and 429 backoff (limits unpublished — see → api-basics.md if present, else treat as opaque).
+- **Rate-shape replies**: answering N queued messages instantly after reconnect hammers `POST /messages`; drain your reply queue with pacing and 429 backoff (limits are unpublished → custody-and-ops.md § Rate limits & retries).
 - **Read receipts**: use `OnAckReceipt` (Go) / `onAckReceipt` (Node) to learn a user read your outbound message; don't poll.
 - **Idempotent dispatch skeleton** (language-neutral):
 

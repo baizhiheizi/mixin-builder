@@ -2,7 +2,7 @@
 
 An MTG is a **consensus group of Mixin bots** that jointly controls one on-chain balance and computes one deterministic action log. This is the Go-only domain: the reference library is `github.com/MixinNetwork/safe` **v0.28.2** (module proxy `@latest`, 2026-10-11) package `mtg`, and the canonical production deployment is `github.com/MixinNetwork/computer` (HEAD fetched 2026-10-11), which drives Mixin Computer over Solana. Node/Ruby SDKs have no MTG runtime — they only *send into* a group (below).
 
-> ⚠️ MTG documentation was **deleted** from developers.mixin.one (commit `48398f1`, ~2025-09-30). This file plus the two source repos are the only reference; everything here was read out of the fetched trees at `/tmp/sdksrc/github.com/MixinNetwork/safe@v0.28.2` and `/tmp/sdksrc/computer/computer-HEAD`.
+> ⚠️ MTG documentation was **deleted** from developers.mixin.one (commit `48398f1`, 2026-08-02). This file plus the two source repos are the only reference; everything here was read from `github.com/MixinNetwork/safe@v0.28.2` and `github.com/MixinNetwork/computer` HEAD (2026-10-11).
 
 ## What an MTG is
 

@@ -2,7 +2,7 @@
 // Protocol: https://mixin.one/oauth/authorize?client_id&scope&response_type=code&redirect_uri
 // Exchange: POST https://api.mixin.one/oauth/token {client_id, client_secret, code, code_verifier?}
 // Profile:  GET  https://api.mixin.one/me  Authorization: Bearer <access_token>
-// Verified against mixin-builder gt.md 2026-10-11 (docs: api/oauth/oauth.md; node: dist/index.d.ts 7.6.0 — client.oauth.getToken uses this same endpoint).
+// Verified 2026-10-11 (mixin-builder references/compatibility.md) (docs: api/oauth/oauth.md; node: dist/index.d.ts 7.6.0 — client.oauth.getToken uses this same endpoint).
 
 import http from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';

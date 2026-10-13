@@ -32,6 +32,21 @@ Three roles, deliberately independent:
 - Node: partial keystores are first-class — `{app_id, session_id, session_private_key}` (no spend) is valid for `MixinApi()` messaging; `OAuthKeystore` (below) has no spend field at all. Build the full keystore only inside the payments module.
 - Ruby: `MixinBot::API.new(...)` per bot and per concern — instantiate a spend-less API for webhooks/messaging, a full one (with `spend_key`) only in the payment process (ruby: mixin_bot 3.0.2 README).
 
+### Keystore formats — which one do you have?
+
+Two shapes exist in the wild, and the official "Create a App" page still shows the legacy one (docs: app/getting-started/create-app.md):
+
+| Legacy (`Ed25519 session` button, pre-Safe docs) | Safe-era (what SDKs and this skill expect) | Notes |
+|---|---|---|
+| `client_id` | `app_id` | same uuid |
+| `session_id` | `session_id` | same |
+| `private_key` (base64url, 64-byte Ed25519) | `session_private_key` (**hex**) | Node decodes `session_private_key` with `Buffer.from(…, 'hex')` and signs with noble `ed25519.sign`, which needs the **32-byte seed**. Convert with `Buffer.from(private_key, 'base64url').subarray(0, 32).toString('hex')` |
+| `pin_token` (base64) | `server_public_key` (hex) | |
+| `pin` (6 digits) | — | legacy PIN; you need it once as `old_pin` for TIP migration (→ § TIP PIN) |
+| — | `spend_private_key` (hex) | absent from legacy keystores: the app can read and message, but can't move Safe funds until TIP + registration are done |
+
+Ruby's `MixinBot.configure` accepts both name sets (`client_id`→`app_id`, `private_key`→`session_private_key`, `pin_token`→`server_public_key`; mixin_bot 3.0.2 `configuration.rb`), and so does `scripts/probe.mjs`. **First check on any new keystore:** `node scripts/probe.mjs me --keystore ks.json` shows whether the key authenticates and whether the app is Sequencer-registered.
+
 Passing the whole keystore through one global config is the classic leak; structure imports so a messaging crash dump can't contain the spend hex.
 
 ## Request auth (JWT)

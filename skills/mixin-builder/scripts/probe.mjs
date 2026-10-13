@@ -8,8 +8,10 @@
 //   node probe.mjs me --keystore ./keystore.json     # GET /safe/me (registration state)
 //   node probe.mjs outputs --keystore ./keystore.json [--asset ASSET_ID] [--state unspent]
 //   node probe.mjs snapshot <snapshot_id> --keystore ./keystore.json
+//   node probe.mjs snapshots --keystore ./keystore.json [--asset ASSET_ID]   # recent ledger + paging check
 //
 // Keystore: JSON with app_id, session_id, session_private_key (hex or base64).
+// Legacy dashboard keystores ({client_id, session_id, private_key, pin_token, pin}) are accepted too.
 // Read-only: session key only — spend_private_key is never read, never required.
 // Exit codes: 0 ok · 1 usage · 2 network/API error.
 import fs from "node:fs";
@@ -24,7 +26,8 @@ function usage(exit = 1) {
   node probe.mjs computer
   node probe.mjs me --keystore <path>
   node probe.mjs outputs --keystore <path> [--asset <uuid>] [--state unspent]
-  node probe.mjs snapshot <snapshot_id> --keystore <path>`);
+  node probe.mjs snapshot <snapshot_id> --keystore <path>
+  node probe.mjs snapshots --keystore <path> [--asset <uuid>]`);
   process.exit(exit);
 }
 
@@ -48,6 +51,11 @@ function loadKeystore(path) {
   let ks;
   try { ks = JSON.parse(fs.readFileSync(path, "utf8")); }
   catch (e) { fatal(`cannot read keystore ${path}: ${e.message}`); }
+  // Legacy dashboard format → Safe-era field names (same mapping as mixin_bot's Configuration).
+  if (!ks.app_id && ks.client_id) {
+    ks = { ...ks, app_id: ks.client_id, session_private_key: ks.session_private_key ?? ks.private_key };
+    console.error("probe: legacy keystore format (client_id/private_key) — mapped to app_id/session_private_key. See references/identity-and-keys.md § Keystore formats.");
+  }
   for (const f of ["app_id", "session_id", "session_private_key"]) {
     if (!ks[f]) fatal(`keystore missing field: ${f}`);
   }
@@ -158,28 +166,83 @@ async function cmdMe(ksPath) {
   const me = await apiGet("/safe/me", token);
   console.log(`# GET /safe/me @ ${stamp()}`);
   console.log(JSON.stringify(me, null, 2));
-  console.log(`\nsequencer-registered: ${Boolean(me?.user_id)}; if this fails with 401 → JWT/signing issue (see references/identity-and-keys.md §3).`);
+  console.log(`\nsequencer-registered: ${Boolean(me?.user_id)}; if this fails with 401 → JWT/signing issue (see references/identity-and-keys.md § Request auth).`);
+}
+
+// Exact 8-decimal fixed-point sum: balances are decimal strings and floats corrupt them.
+function toUnits(amount) {
+  const neg = amount.startsWith("-");
+  const [i, f = ""] = amount.replace("-", "").split(".");
+  const v = BigInt(i || "0") * 100000000n + BigInt((f + "00000000").slice(0, 8));
+  return neg ? -v : v;
+}
+function fromUnits(v) {
+  const neg = v < 0n; if (neg) v = -v;
+  return `${neg ? "-" : ""}${v / 100000000n}.${(v % 100000000n).toString().padStart(8, "0")}`;
 }
 
 async function cmdOutputs(ksPath, flags) {
   const ks = loadKeystore(ksPath);
-  const params = new URLSearchParams({
-    members: membersHash([ks.app_id]),
-    threshold: "1",
-    state: flags.state || "unspent",
-    limit: "50",
-    order: "ASC",
-  });
-  if (flags.asset) params.set("asset", flags.asset);
-  const path = `/safe/outputs?${params.toString()}`;
-  const token = signToken(ks, "GET", path);
-  const outs = await apiGet(path, token);
-  const list = Array.isArray(outs) ? outs : [];
   const byAsset = {};
-  for (const o of list) byAsset[o.asset_id] = (byAsset[o.asset_id] || 0) + Number(o.amount);
-  console.log(`# GET /safe/outputs (first ${list.length}) @ ${stamp()}`);
-  for (const [a, sum] of Object.entries(byAsset)) console.log(`${a}  ≈ ${sum.toFixed(8)}  (display only — use decimal strings in code)`);
-  if (!list.length) console.log("(no outputs in range)");
+  const seen = new Set();
+  let offset = 0, total = 0;
+  for (;;) {
+    const params = new URLSearchParams({
+      members: membersHash([ks.app_id]),
+      threshold: "1",
+      offset: String(offset),
+      limit: "500",
+      state: flags.state || "unspent",
+      order: "ASC",
+    });
+    if (flags.asset) params.set("asset", flags.asset);
+    const path = `/safe/outputs?${params.toString()}`;
+    const outs = await apiGet(path, signToken(ks, "GET", path));
+    const list = Array.isArray(outs) ? outs : [];
+    for (const o of list) {
+      if (seen.has(o.output_id)) continue; // offset is inclusive — same dedupe as Go AssetBalanceWithSafeUser
+      seen.add(o.output_id);
+      const a = (byAsset[o.asset_id] ??= { sum: 0n, count: 0, inscriptions: 0 });
+      a.sum += toUnits(String(o.amount)); a.count++;
+      if (o.inscription_hash) a.inscriptions++;
+    }
+    total = seen.size;
+    if (list.length < 500) break;
+    const next = list[list.length - 1].sequence; // offset = numeric UTXO sequence (docs api/sequencer/outputs.md)
+    if (next <= offset) break;
+    offset = next;
+  }
+  console.log(`# GET /safe/outputs state=${flags.state || "unspent"} (${total} outputs, all pages) @ ${stamp()}`);
+  console.log(`members = [${ks.app_id}] threshold 1 — balance = Σ unspent outputs; there is no balance field.`);
+  for (const [a, v] of Object.entries(byAsset)) {
+    const warn = v.count > 100 ? "  ⚠ >100 UTXOs: consolidate (references/payments.md § Dust & consolidation)" : "";
+    const ins = v.inscriptions ? ` (${v.inscriptions} inscription UTXOs, not spendable as value)` : "";
+    console.log(`${a}  ${fromUnits(v.sum)}  in ${v.count} UTXOs${ins}${warn}`);
+  }
+  if (!total) console.log("(no outputs) — not registered yet? run: node probe.mjs me --keystore <path>");
+  console.log("asset_id → symbol/chain: GET /safe/assets/<asset_id> (references/concepts.md § Asset model)");
+}
+
+async function cmdSnapshots(ksPath, flags) {
+  // Read-only: shows the newest snapshots and checks the paging contract the payment watcher
+  // relies on (offset = created_at cursor, order=ASC returns rows at/after the offset, oldest first).
+  const ks = loadKeystore(ksPath);
+  const get = async (q) => {
+    const params = new URLSearchParams({ limit: "20", ...q });
+    if (flags.asset) params.set("asset", flags.asset);
+    const path = `/safe/snapshots?${params.toString()}`;
+    const r = await apiGet(path, signToken(ks, "GET", path));
+    return Array.isArray(r) ? r : [];
+  };
+  const recent = await get({});
+  console.log(`# GET /safe/snapshots (default order, 20) @ ${stamp()}`);
+  for (const s of recent) console.log(`${s.created_at}  ${s.amount.padStart(18)}  ${s.asset_id}  opp=${s.opponent_id || "-"}  trace=${s.request_id || "-"}${s.deposit ? "  [deposit]" : ""}${s.withdrawal ? "  [withdrawal]" : ""}`);
+  if (recent.length < 2) { console.log("\n(need ≥ 2 snapshots to check paging semantics)"); return; }
+  const times = recent.map((s) => s.created_at).sort();
+  const mid = times[Math.floor(times.length / 2)];
+  const asc = await get({ offset: mid, order: "ASC" });
+  const ascOk = asc.length > 0 && asc.every((s, i) => s.created_at >= mid && (i === 0 || s.created_at >= asc[i - 1].created_at));
+  console.log(`\npaging check: offset=${mid} order=ASC → ${asc.length} rows, ${ascOk ? "ascending and ≥ offset ✓ (cursor paging is safe)" : "NOT ascending/after offset ✗ — do not use created_at cursor paging as written in references/reconciliation.md; report this"}`);
 }
 
 async function cmdSnapshot(id, ksPath) {
@@ -198,6 +261,7 @@ try {
   if (cmd === "computer") await cmdComputer();
   else if (cmd === "me") { ksPath || usage(); await cmdMe(ksPath); }
   else if (cmd === "outputs") { ksPath || usage(); await cmdOutputs(ksPath, args.flags); }
+  else if (cmd === "snapshots") { ksPath || usage(); await cmdSnapshots(ksPath, args.flags); }
   else if (cmd === "snapshot") { args._[1] && ksPath ? await cmdSnapshot(args._[1], ksPath) : usage(); }
   else usage();
 } catch (e) {

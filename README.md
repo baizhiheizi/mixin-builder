@@ -12,6 +12,7 @@ npx skills add baizhiheizi/mixin-builder
 
 # or manually: copy the skill into your agent's skills directory
 cp -r skills/mixin-builder ~/.agents/skills/   # or .claude/skills/, .codex/skills/, ...
+```
 
 No build step. The scripts are plain Node (≥ 20) with zero npm dependencies.
 
@@ -38,7 +39,8 @@ Ground live facts instead of trusting prose:
 ```bash
 node skills/mixin-builder/scripts/probe.mjs computer        # Mixin Computer info (no auth)
 node skills/mixin-builder/scripts/probe.mjs me --keystore ks.json
-node skills/mixin-builder/scripts/probe.mjs outputs --keystore ks.json
+node skills/mixin-builder/scripts/probe.mjs outputs --keystore ks.json     # exact balances, all pages
+node skills/mixin-builder/scripts/probe.mjs snapshots --keystore ks.json   # recent ledger + paging check
 ```
 
 ## Manage a bot wallet without writing code
@@ -51,9 +53,9 @@ Prompts like these work as-is; the skill routes the agent to the right reference
 
 | You say | What the agent does |
 |---|---|
-| "My keystore is at `~/keystores/my-bot.json`. What's my bot's balance?" | Runs `scripts/probe.mjs me` (registration state) and `outputs` (unspent UTXOs summed per asset — Mixin has no balance field). Read-only: the spend key is never read. |
+| "My keystore is at `~/keystores/my-bot.json`. What's my bot's balance?" | Runs `scripts/probe.mjs me` (registration state) and `outputs` (all unspent UTXOs summed exactly per `asset_id` — Mixin has no balance field). Read-only: the spend key is never read. |
 | "Send 0.01 BTC to `bc1q…`" | Follows `references/payments.md`: decimal-string amount, stable `trace_id`, verifies the raw transaction for free via `/safe/transaction/requests`, only signs after you confirm, then polls to `spent` and shows you the snapshot as proof. |
-| "Has anyone paid the bot since yesterday?" | Walks snapshots per `references/reconciliation.md`: payer, asset, amount, trace — deduplicated on trace IDs. |
+| "Has anyone paid the bot since yesterday?" | Walks snapshots per `references/reconciliation.md`: payer, asset, amount, trace — deduplicated on `snapshot_id`. |
 
 Sending requires the bot to be Sequencer-registered; if `probe.mjs me` says it isn't, the agent walks you through it via `references/identity-and-keys.md`.
 
@@ -61,18 +63,18 @@ Sending requires the bot to be Sequencer-registered; if `probe.mjs me` says it i
 
 | Domain | Reference | Highlights |
 |---|---|---|
-| Mental model, EVM/Telegram/fintech translations | `references/concepts.md` | kernel / sequencer / Safe / Blaze, actors, asset model |
-| Keys, auth, identity | `references/identity-and-keys.md` | keystore anatomy, key separation, JWT, TIP PIN, Sequencer registration, OAuth (PKCE + secret), sub-accounts, app-security |
+| Mental model, EVM/Telegram/fintech translations | `references/concepts.md` | kernel / sequencer / Safe / Blaze, actors, asset model (one symbol ≠ one asset) |
+| Keys, auth, identity | `references/identity-and-keys.md` | keystore anatomy + legacy/Safe formats, key separation, JWT, TIP PIN, Sequencer registration, OAuth (PKCE + secret), sub-accounts, app-security |
 | Blaze WebSocket | `references/blaze.md` | wire protocol, ack covenant, reconnect doctrine, the IP-block incident |
 | Messaging | `references/messaging.md` | all categories, APP_CARD anatomy, groups/circles, attachments, encrypted messages |
 | Payments | `references/payments.md` | UTXO model, send lifecycle, multisig, withdrawals + fee branching, dust, inscriptions, storage entries |
-| Reconciliation | `references/reconciliation.md` | snapshots as ledger, credit-once, cursors, monitoring |
+| Reconciliation | `references/reconciliation.md` | snapshots as ledger, credit-once, forward cursor paging, order payments (trace → order, under/over-pay, refunds), monitoring |
 | Custody & ops | `references/custody-and-ops.md` | key storage, leak playbook, testing, deployment, rate limits |
 | Mixin Computer | `references/computer.md` | registration, system calls (invoice pattern), fees, nonce accounts — the only written Computer reference in any language |
 | MTG trusted groups | `references/mtg.md` | observer/signer/worker, determinism rules, thresholds, FROST |
 | Bot-as-app | `references/webview.md` | card → webview handoff, JS bridge, design conventions |
 | Links & encodings | `references/schemas.md` | `mixin://` families, pay URIs, MIX/MIN addresses, codes |
-| Failure lookup | `references/gotchas.md`, `references/common-errors.md` | 15 ranked war stories; every error code → cause → fix |
+| Failure lookup | `references/gotchas.md`, `references/common-errors.md` | 18 war stories; every error code → cause → fix |
 | SDK navigation | `references/sdk-map.md` | canonical source file per topic per language |
 | Truth anchor | `references/compatibility.md` | verified-against matrix + re-verify instructions |
 
@@ -96,7 +98,7 @@ skills/mixin-builder/
 ├── scripts/
 │   ├── check-currency.mjs   # version + export-surface + scaffold audit (exit ≠ 0 on drift)
 │   ├── baseline.json        # expected surfaces, regenerated via --update
-│   └── probe.mjs            # read-only live probes (computer / me / outputs / snapshot)
+│   └── probe.mjs            # read-only live probes (computer / me / outputs / snapshots / snapshot)
 ├── assets/
 │   ├── scaffold-bot-echo/       # echo bot: go/ node/ ruby/
 │   ├── scaffold-oauth-web/      # backend-secret OAuth login, zero-dep

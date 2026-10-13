@@ -127,4 +127,4 @@ Domain rule: treat every deep link you *emit* as a serializer (encode) and every
 - go: url_scheme.go, mix.go, invoice.go v3.25.7
 - node: dist/index.d.ts + dist/index.js 7.6.0 (`buildMixinOneSafePaymentUri`, PaymentParams, CodeClient.schemes `/schemes`, invoice helpers)
 - docs: schema deep-link sections referenced by Go doc comments (developers.mixin.one/docs/schema)
-- gt.md verified baseline 2026-10-11
+- verified 2026-10-11 (→ compatibility.md)

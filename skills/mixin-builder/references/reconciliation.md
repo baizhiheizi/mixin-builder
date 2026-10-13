@@ -7,7 +7,7 @@ The kernel settles UTXO transactions; the sequencer indexes them into **snapshot
 `GET /safe/snapshots?app=UUID&asset=UUID&opponent=UUID&offset=RFC3339NANO&limit=500` (docs: api/sequencer/snapshots.md)
 
 - `app`, `asset`, `opponent` are **mutually exclusive** — one filter per call, not composable (docs: api/sequencer/snapshots.md). With bot auth, `app` aggregates activity across sub-users.
-- `offset` is a **created_at RFC3339NANO cursor**, not a row number. `limit` caps the page (docs example 500). `order` supported by SDKs (Node `fetchSafeSnapshots({asset?, opponent?, offset?, limit?, order?})`).
+- `offset` is a **created_at RFC3339NANO cursor**, not a row number. `limit` caps the page (docs example 500). `order` is undocumented (see § Cursor management). Node `fetchSafeSnapshots({app?, asset?, opponent?, offset?, limit?})`; Ruby `safe_snapshots(order:)`.
 - Snapshot fields (docs `_partials/_resp.safe.snapshots.md`; go: snapshot.go `SafeSnapshot` struct v3.25.7):
 
 | Field | Meaning |
@@ -41,9 +41,35 @@ Anti-pattern: crediting inside the Blaze handler directly off the frame. Blaze r
 ## Cursor management
 
 - Persist `(bot_id, last_processed_created_at)` in the same transaction as the credit insert.
-- Restart = re-read from the cursor (start `offset` = last processed `created_at`), never from "now".
-- **Clock caveat**: `created_at` ordering is not guaranteed unique — two snapshots can share a timestamp. Mitigate: page with `limit` + `order=DESC` from the cursor, then **reverse the page** before processing (oldest first), and rely on the `UNIQUE(snapshot_id)` constraint as the final guard for stragglers at the boundary. On restart, re-read one extra page before the cursor to catch late-written rows.
+- **Page forward: `order=ASC&offset=<cursor>`**, process rows in returned order, and set the cursor to each row's `created_at` as you go. Keep fetching until a page comes back shorter than `limit`. **Never page DESC from a cursor**: with a `created_at` offset, DESC returns rows *older* than the cursor. Reversing such a page and advancing to its newest row walks the cursor backwards, and new payments are never seen. (An earlier version of this file and of the payment-watcher scaffold had exactly this bug.)
+- `order` is not in the docs table or Node's `SafeSnapshotsRequest` type. The Ruby gem's `safe_snapshots` sends it, and Node's axios client passes extra params through unchanged. Before you rely on it, check with `scripts/probe.mjs snapshots --keystore ks.json`, and assert in code that each page is ascending and at or after the cursor. If it isn't, stop instead of advancing.
+- **Shared timestamps**: `created_at` is not unique, so treat the offset as inclusive. You will re-read the boundary rows, and `UNIQUE(snapshot_id)` makes that harmless. If a full page shares one `created_at`, a timestamp cursor can't page past it; split by `asset=` or raise `limit`.
+- **First run**: start the cursor at "now" (or an explicit backfill time), never at the beginning of history. Otherwise every past payment gets credited on day one.
+- **Dry-run gets its own cursor.** If a dry-run advances the live cursor, the first live run silently skips everything the dry-run printed.
 - Cursors are per-bot, per-filter-shape: if you poll with `asset=` filters, keep a cursor per asset (filters are mutually exclusive anyway).
+
+## Order payments (pay link → snapshot → order)
+
+The most common builder flow: "user pays for order #123". The trace you put in the pay link becomes the payer's transaction `request_id`, and that shows up on your incoming snapshot. Use it as the join key.
+
+1. **Issue**: create the order row first, with `trace_id = uuidv5(order_id)` (or a random uuid stored on the order), `asset_id`, an exact decimal-string `amount` and `expires_at`. Render `https://mixin.one/pay/<bot MIX>?asset=…&amount=…&trace=<trace_id>&memo=…` (→ schemas.md §2, URL-encode every value) or `mixin://pay?…`. The memo is optional context and is hex-encoded on the snapshot. Never use it as the only key: users and wallets can edit or drop it.
+2. **Match**: in the credit-once poller, for each incoming snapshot (`amount > 0`, no `deposit`), look up an order by `snapshot.request_id`. Then check `asset_id` **exactly**: USDT-on-Tron is not USDT-on-Ethereum (→ concepts.md § Asset model). Compare `amount` as decimals, not floats.
+3. **Decide**, in the same DB transaction as the credit row:
+
+   | Case | Action |
+   |---|---|
+   | trace matches, asset matches, amount == expected | mark order paid (`paid_snapshot_id = snapshot_id`) |
+   | amount < expected | partial: hold it, or refund (below); never mark paid |
+   | amount > expected | mark paid, refund or credit the excess per your policy |
+   | wrong asset / expired / order already paid | refund |
+   | no matching trace | "unattributed": credit by `opponent_id` if your product allows, else queue for review or refund |
+
+4. **Refund** = an ordinary transfer back to `opponent_id`, with `trace_id = uuidv5("refund:" + snapshot_id)`. It is deterministic, so a retried refund can never double-pay (→ payments.md § Sending money). This path needs the spend key, so run it in the payments service, not in the watcher.
+5. **Tell the user**: send a message or card to the payer. Go `SafeNotifySnapshot` / Ruby `create_safe_snapshot_notification` attach the snapshot receipt to the conversation.
+
+Direct lookups: Ruby has `safe_snapshot_by_trace(trace_id)` → `GET /safe/snapshots/trace/:trace_id` (mixin_bot 3.0.2 source; not in the official docs or the Go/Node SDKs `[UNVERIFIED for other SDKs]`). Useful for a "check payment" button. The poller above stays the source of truth.
+
+**Verify it worked**: pay a test order from a second account with an exact amount. Then pay again with the same link. The same trace maps to the same transaction request, so the wallet should treat it as already paid (a *different* payer reusing a trace gets `20125`). If a second snapshot does arrive for a paid order, it must land in the "already paid → refund" branch. Finally pay 1 unit of dust in the wrong asset and assert a refund snapshot to that payer with the deterministic refund trace.
 
 ## Monitoring queries
 
@@ -60,6 +86,6 @@ Kill-test (credit-once): start the watcher, let it credit a batch, `kill -9` mid
 ## Sources
 
 - docs: api/sequencer/snapshots.md, api/sequencer/transactions.md, `_partials/_resp.safe.snapshots.md` (repo HEAD 2026-10-05)
-- go: snapshot.go, output.go, transaction.go v3.25.7 (`/tmp/sdksrc/github.com/MixinNetwork/bot-api-go-client/v3@v3.25.7/`)
-- node: dist/index.d.ts, dist/blaze/index.d.ts 7.6.0 (`/tmp/sdksrc/node/package/`)
-- ruby: mixin_bot 3.0.2 README (`/tmp/sdksrc/mixin_bot_README.md`)
+- go: snapshot.go, output.go, transaction.go v3.25.7
+- node: dist/index.d.ts, dist/blaze/index.d.ts 7.6.0
+- ruby: mixin_bot 3.0.2 README

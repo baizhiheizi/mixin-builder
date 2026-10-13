@@ -15,6 +15,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -39,6 +40,7 @@ type keystore struct {
 	ClientID          string `json:"client_id"` // dashboard legacy alias for app_id
 	SessionID         string `json:"session_id"`
 	SessionPrivateKey string `json:"session_private_key"`
+	PrivateKey        string `json:"private_key"` // dashboard legacy: base64url of the 64-byte Ed25519 key
 }
 
 // echoListener implements bot.BlazeListener. SyncAck() == true makes the
@@ -53,7 +55,7 @@ func (l *echoListener) OnMessage(ctx context.Context, msg bot.MessageView, userI
 	if msg.Category != "PLAIN_TEXT" || msg.UserId == l.su.UserId {
 		return nil
 	}
-	data, err := base64.RawURLEncoding.DecodeString(msg.DataBase64)
+	data, err := decodeBase64(msg.DataBase64)
 	if err != nil {
 		log.Printf("decode message %s data: %v", msg.MessageId, err)
 		return nil // ack it anyway; a bad payload will redeliver forever otherwise
@@ -72,6 +74,18 @@ func (l *echoListener) OnAckReceipt(ctx context.Context, msg bot.MessageView, us
 }
 
 func (l *echoListener) SyncAck() bool { return true }
+
+// decodeBase64 accepts both URL-safe and standard alphabets, padded or not:
+// clients don't agree on one, and a strict decoder would silently drop messages.
+func decodeBase64(s string) ([]byte, error) {
+	for _, enc := range []*base64.Encoding{base64.RawURLEncoding, base64.URLEncoding, base64.StdEncoding, base64.RawStdEncoding} {
+		if b, err := enc.DecodeString(s); err == nil {
+			return b, nil
+		}
+	}
+	return nil, fmt.Errorf("not base64")
+}
+
 // deterministicReplyID derives the reply message_id from the inbound one:
 // same input → same UUID, so a re-sent reply is deduplicated by the network.
 func deterministicReplyID(inbound string) (string, error) {
@@ -89,7 +103,7 @@ func jitterBackoff(d time.Duration) time.Duration {
 	if err != nil {
 		return d
 	}
-	return d/2 + time.Duration(int64(d)*r.Int64()/1500)
+	return d/2 + time.Duration(int64(d)*r.Int64()/1000)
 }
 
 func main() {
@@ -113,6 +127,14 @@ func main() {
 	}
 	if ks.AppID == "" {
 		ks.AppID = ks.ClientID
+	}
+	if ks.SessionPrivateKey == "" && ks.PrivateKey != "" {
+		// The Go SDK wants the 32-byte seed as hex (auth.go parseEd25519PrivateKey).
+		key, err := decodeBase64(ks.PrivateKey)
+		if err != nil || len(key) < 32 {
+			log.Fatal("legacy private_key is not base64 Ed25519 key material")
+		}
+		ks.SessionPrivateKey = hex.EncodeToString(key[:32])
 	}
 	if ks.AppID == "" || ks.SessionID == "" || ks.SessionPrivateKey == "" {
 		log.Fatal("keystore is missing app_id/session_id/session_private_key")

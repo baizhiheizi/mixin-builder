@@ -556,7 +556,8 @@
     "version": "3.0.2"
   },
   "docs": {
-    "version": "2026-10-05T01:43:18Z"
+    "version": "2026-08-02T11:46:56Z",
+    "metric": "latest default-branch commit touching developers-docs/docs (48398f1)"
   },
   "computer": {
     "version": "v0.9.1-a37afa3",
