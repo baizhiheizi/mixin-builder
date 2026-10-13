@@ -10,7 +10,7 @@ Protocol: fresh session per prompt · no hints · record the transcript · check
 | `oauth-web.md` | OAuth PKCE + backend secret, scopes | identity-and-keys.md, scaffold-oauth-web |
 | `payments-credit.md` | receiving, credit-once, reconciliation | payments.md, reconciliation.md, scaffold-payment-watcher |
 | `blaze-duplicates.md` | ack semantics, redelivery vs ack-bug | blaze.md, gotchas.md |
-| `withdrawal-fees.md` | fee branching, two-tx shape | payments.md §5, common-errors.md |
+| `withdrawal-fees.md` | fee branching, two-tx shape | payments.md § Withdrawals, common-errors.md |
 | `computer-call.md` | registration, system-call invoice flow | computer.md |
 | `custody-leak.md` | leak playbook, key-grant reasoning | custody-and-ops.md |
 

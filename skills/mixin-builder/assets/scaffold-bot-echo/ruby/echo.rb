@@ -12,7 +12,6 @@
 #
 # Usage: ruby echo.rb [--keystore path]   (or set KEYSTORE)
 
-require 'base64'
 require 'digest'
 require 'eventmachine'
 require 'faye/websocket'
@@ -95,7 +94,7 @@ def connect
       return unless data['category'] == 'PLAIN_TEXT'
       return if data['user_id'] == MixinBot.config.app_id # own messages
 
-      text = Base64.decode64(data['data_base64'].to_s)
+      text = data['data_base64'].to_s.tr('-_', '+/').unpack1('m').force_encoding('UTF-8') # core base64 (the base64 gem left Ruby's defaults in 3.4); accepts URL-safe input too
       puts "[#{Time.now}] echo -> conversation #{data['conversation_id']} user #{data['user_id']}"
       # Sending over REST, not the socket (recommended for workers).
       API.send_text_message(

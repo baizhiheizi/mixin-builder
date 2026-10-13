@@ -12,7 +12,9 @@
 //   Go    : https://proxy.golang.org/github.com/!mixin!network/bot-api-go-client/v3/@latest
 //   Node  : https://registry.npmjs.org/@mixin.dev/mixin-node-sdk/latest
 //   Ruby  : https://rubygems.org/api/v1/gems/mixin_bot.json
-//   Docs  : https://api.github.com/repos/MixinNetwork/developers.mixin.one (pushed_at)
+//   Docs  : https://api.github.com/repos/MixinNetwork/developers.mixin.one/commits?path=developers-docs/docs
+//           (date of the latest default-branch commit touching doc content — repo pushed_at
+//            also moves on dependabot/branch pushes and raised false drift alarms)
 //   Computer: https://computer.mixin.one/ (live version string)
 // Zero npm deps. Needs `tar` (bsdtar handles zip+tgz) or `unzip` for surface extraction.
 
@@ -32,7 +34,7 @@ const GO_MODULE_PATH = "github.com/!mixin!network/bot-api-go-client/v3";
 const failures = [];
 const notes = [];
 
-const sh = (cmd, args) => execFileSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...opts });
 
 async function json(url) {
   const res = await fetch(url, { headers: { "User-Agent": "mixin-builder-check-currency" } });
@@ -248,7 +250,7 @@ const next = {
   go: await checkGo(baseline, update, deep),
   node: await checkNode(baseline, update, deep),
   ruby: await checkSimple(baseline, "ruby", "https://rubygems.org/api/v1/gems/mixin_bot.json", (d) => d.version, "ruby mixin_bot"),
-  docs: await checkSimple(baseline, "docs", "https://api.github.com/repos/MixinNetwork/developers.mixin.one", (d) => d.pushed_at, "docs repo pushed_at"),
+  docs: await checkSimple(baseline, "docs", "https://api.github.com/repos/MixinNetwork/developers.mixin.one/commits?path=developers-docs/docs&per_page=1", (d) => d[0]?.commit?.committer?.date, "docs content last commit"),
   computer: await checkComputer(baseline),
 };
 checkScaffolds();

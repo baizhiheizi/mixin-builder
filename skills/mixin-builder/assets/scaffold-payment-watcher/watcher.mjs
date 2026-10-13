@@ -1,12 +1,15 @@
 // Mixin payment watcher — Blaze (SYSTEM_SAFE_SNAPSHOT) as a *trigger*,
 // GET /safe/snapshots as the ledger of truth, credit-once via node:sqlite.
 //
-// Verified symbols (mixin-builder gt.md 2026-10-11, @mixin.dev/mixin-node-sdk 7.6.0):
+// Verified symbols (mixin-builder references/compatibility.md 2026-10-11, @mixin.dev/mixin-node-sdk 7.6.0):
 //   MixinApi({ keystore }) -> client.safe.fetchSafeSnapshots({ asset?, offset?, limit?, order? })
 //   import { BlazeKeystoreClient } from '@mixin.dev/mixin-node-sdk/blaze'
 //     new BlazeKeystoreClient(keystore, { parse: true, syncAck: true }).loop({ onMessage })
 //   Message category SYSTEM_SAFE_SNAPSHOT arrives on Blaze.
-// Protocol: GET /safe/snapshots (offset = created_at ISO8601, order DESC) — docs api/sequencer/snapshots.md.
+// Protocol: GET /safe/snapshots?offset=<created_at RFC3339NANO>&order=ASC — docs api/sequencer/snapshots.md.
+//   `order` is not in the docs or in Node's SafeSnapshotsRequest type, but the Ruby gem (mixin_bot 3.0.2
+//   safe_snapshots) sends it and axios passes it through. The watcher asserts the page really is
+//   ascending and past the cursor, and stops loudly if not. Check with `probe.mjs snapshots`.
 // Errors: HTTP 202 + code 429 = rate limit; backoff and retry (docs api/error-codes.md).
 
 import { accessSync, constants, readFileSync } from 'node:fs';
@@ -21,11 +24,12 @@ try {
 }
 
 const USAGE = `Usage:
-  KEYSTORE=/path/to/keystore.json node watcher.mjs [--no-dry-run] [--asset=<asset_id>] [--db=credits.db]
+  KEYSTORE=/path/to/keystore.json node watcher.mjs [--no-dry-run] [--since=<RFC3339>] [--asset=<asset_id>] [--db=credits.db]
   or set MIXIN_APP_ID, MIXIN_SESSION_ID, MIXIN_SERVER_PUBLIC_KEY, MIXIN_SESSION_PRIVATE_KEY
 
 Args:
   --no-dry-run    actually insert credits (default: dry-run, prints what would be credited)
+  --since=<ts>    first run only: start from this created_at (default: now — history is NOT credited)
   --asset=<id>    only watch this asset id (e.g. c94ac88f-4671-3976-b60a-09064f1811e8 = XIN)
   --db=<path>     sqlite file, default credits.db
   --poll=15       poll interval seconds, default 15
@@ -34,9 +38,10 @@ A read-only keystore is enough: spend_private_key is NOT needed (we never sign).
 `;
 
 function parseArgs(argv) {
-  const opts = { dryRun: true, asset: undefined, db: 'credits.db', pollSec: 15 };
+  const opts = { dryRun: true, since: undefined, asset: undefined, db: 'credits.db', pollSec: 15 };
   for (const a of argv) {
     if (a === '--no-dry-run') opts.dryRun = false;
+    else if (a.startsWith('--since=')) opts.since = new Date(a.slice(8)).toISOString();
     else if (a.startsWith('--asset=')) opts.asset = a.slice(8);
     else if (a.startsWith('--db=')) opts.db = a.slice(5);
     else if (a.startsWith('--poll=')) opts.pollSec = Number(a.slice(7));
@@ -83,6 +88,8 @@ db.exec(`
     user_id     TEXT NOT NULL,      -- payer (snapshot opponent)
     asset_id    TEXT NOT NULL,
     amount      TEXT NOT NULL,      -- decimal string; NEVER floats
+    request_id  TEXT,               -- payer's trace: match it to the order you issued the pay link for
+    memo        TEXT,               -- hex-encoded extra (decode with Buffer.from(memo, 'hex'))
     created_at  TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS state (
@@ -91,40 +98,61 @@ db.exec(`
   );
 `);
 
+// Dry-run keeps its own cursor: if it advanced the live one, switching to --no-dry-run
+// would skip every snapshot the dry-run had already printed.
+const CURSOR_KEY = opts.dryRun ? 'snapshot_cursor_dry_run' : 'snapshot_cursor';
 function getCursor() {
-  const row = db.prepare('SELECT value FROM state WHERE key = ?').get('snapshot_cursor');
+  const row = db.prepare('SELECT value FROM state WHERE key = ?').get(CURSOR_KEY);
   return row ? row.value : null;
 }
 function setCursor(v) {
   db.prepare('INSERT INTO state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-    .run('snapshot_cursor', v);
+    .run(CURSOR_KEY, v);
+}
+if (!getCursor()) {
+  // No cursor yet: start at --since or now. Starting from the beginning would credit all past payments.
+  const start = opts.since ?? new Date().toISOString();
+  setCursor(start);
+  console.log(`no cursor yet — starting at ${start}${opts.since ? '' : ' (pass --since=<RFC3339> to backfill)'}`);
 }
 function creditOnce(snap) {
   // INSERT OR IGNORE: a snapshot is credited at most once even across restarts and Blaze duplicates.
-  const r = db.prepare(
-    'INSERT OR IGNORE INTO credits (snapshot_id, user_id, asset_id, amount, created_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(snap.snapshot_id, snap.user_id, snap.asset_id, snap.amount, snap.created_at);
-  return r.changes > 0;
+  // The cursor moves in the same sqlite transaction, so a crash can't credit without advancing it, or advance it without crediting.
+  db.exec('BEGIN');
+  try {
+    const r = db.prepare(
+      'INSERT OR IGNORE INTO credits (snapshot_id, user_id, asset_id, amount, request_id, memo, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(snap.snapshot_id, snap.opponent_id, snap.asset_id, snap.amount, snap.request_id ?? null, snap.memo ?? null, snap.created_at);
+    setCursor(snap.created_at);
+    db.exec('COMMIT');
+    return r.changes > 0;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 }
 
 // ---------- rate-limit-aware fetch with backoff ----------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function fetchSnapshotsWithBackoff({ limit = 100, offset, order = 'DESC' }) {
+const PAGE = 100;
+
+async function fetchSnapshotsWithBackoff(offset) {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await client.safe.fetchSafeSnapshots({ limit, offset, order, ...(opts.asset ? { asset: opts.asset } : {}) });
+      // `order` isn't in the Node type, but axios passes it through as a query param (see header).
+      return await client.safe.fetchSafeSnapshots({ limit: PAGE, offset, order: 'ASC', ...(opts.asset ? { asset: opts.asset } : {}) });
     } catch (err) {
       // HTTP 202 + body code 429 = rate limited (docs api/error-codes.md); also plain 429.
       const status = err?.status ?? err?.originalError?.response?.status;
       const code = err?.code;
-      if ((status === 202 && code === 429) || status === 429) {
+      if ((status === 202 && code === 429) || status === 429 || code === 429) {
         const wait = Math.min(60_000, 2 ** attempt * 1000);
         console.error(`rate limited (429), backing off ${wait}ms`);
         await sleep(wait);
         continue;
       }
-      if (status === 401) throw new Error('401: keystore rejected — check session keys (→ references/common-errors.md)');
+      if (status === 401 || code === 401) throw new Error('401: keystore rejected — check session keys (→ references/common-errors.md)');
       if (attempt < 3) {
         await sleep(2 ** attempt * 1000);
         continue;
@@ -135,28 +163,47 @@ async function fetchSnapshotsWithBackoff({ limit = 100, offset, order = 'DESC' }
 }
 
 // ---------- reconciliation loop (the ledger of truth) ----------
+// Drains every page past the cursor, oldest first. The cursor is a created_at, and
+// several snapshots can share one, so the offset is re-read inclusively and the
+// snapshot_id primary key absorbs the overlap.
 async function reconcileOnce() {
-  const cursor = getCursor();
-  const page = await fetchSnapshotsWithBackoff({ offset: cursor ?? undefined });
-  const snaps = (page ?? []).filter(Boolean);
-  if (!snaps.length) return;
-  // API returns DESC (newest first); process oldest→newest so the cursor never skips.
-  for (const s of snaps.slice().reverse()) {
-    // incoming credit: positive amount paid to us by an opponent
-    const amount = String(s.amount ?? '');
-    const positive = !amount.startsWith('-');
-    if (positive && s.snapshot_id) {
-      if (opts.dryRun) {
-        console.log(`[dry-run] would credit snapshot=${s.snapshot_id} user=${s.opponent_id ?? s.user_id} asset=${s.asset_id} amount=${amount}`);
-        console.log('          (credit-once would be enforced by sqlite PRIMARY KEY on snapshot_id)');
-      } else if (creditOnce({ ...s, user_id: s.opponent_id ?? s.user_id })) {
-        console.log(`credited snapshot=${s.snapshot_id} user=${s.opponent_id ?? s.user_id} asset=${s.asset_id} amount=${amount}`);
-      } else {
-        console.log(`duplicate ignored snapshot=${s.snapshot_id} (sqlite PK)`);
-      }
+  for (;;) {
+    const cursor = getCursor();
+    const page = ((await fetchSnapshotsWithBackoff(cursor)) ?? []).filter(Boolean);
+    if (!page.length) return;
+    if (page.some((s, i) => i > 0 && s.created_at < page[i - 1].created_at) || page[0].created_at < cursor) {
+      // The server ignored order=ASC (or semantics changed). Stop rather than walk the cursor backwards.
+      throw new Error(`snapshots page is not ascending from cursor ${cursor} — refusing to advance. Run scripts/probe.mjs snapshots and see references/reconciliation.md`);
     }
-    setCursor(s.created_at); // advance cursor by created_at
+    let progressed = false;
+    for (const s of page) {
+      if (s.created_at > cursor) progressed = true;
+      handleSnapshot(s);
+    }
+    if (page.length < PAGE) return; // caught up
+    if (!progressed) {
+      // A full page sharing one created_at: the API can't page past it with a timestamp cursor.
+      throw new Error(`>${PAGE} snapshots share created_at=${cursor}; raise PAGE or page by asset`);
+    }
   }
+}
+
+function handleSnapshot(s) {
+  const amount = String(s.amount ?? '');
+  const incoming = amount !== '' && !amount.startsWith('-') && !/^0(\.0*)?$/.test(amount);
+  let skip = null;
+  if (!incoming) skip = 'outgoing/zero';
+  else if (s.deposit) skip = 'on-chain deposit (no Mixin payer — attribute via your per-user deposit entry)';
+  else if (!s.opponent_id) skip = 'no opponent';
+
+  if (opts.dryRun) {
+    if (!skip) console.log(`[dry-run] would credit snapshot=${s.snapshot_id} user=${s.opponent_id} asset=${s.asset_id} amount=${amount} trace=${s.request_id ?? '-'}`);
+    setCursor(s.created_at);
+    return;
+  }
+  if (skip) { setCursor(s.created_at); return; }
+  if (creditOnce(s)) console.log(`credited snapshot=${s.snapshot_id} user=${s.opponent_id} asset=${s.asset_id} amount=${amount} trace=${s.request_id ?? '-'}`);
+  else console.log(`duplicate ignored snapshot=${s.snapshot_id} (sqlite PK)`);
 }
 
 // ---------- Blaze loop (trigger only — never the source of truth) ----------

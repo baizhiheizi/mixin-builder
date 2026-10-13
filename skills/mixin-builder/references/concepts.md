@@ -21,7 +21,7 @@ Mixin is not a smart-contract chain. It is a UTXO payment network with a messeng
 | Bot / app | A user created via the developer dashboard; `app_id == user_id` | uuid; authenticates with EdDSA JWT per request (identity-and-keys.md) |
 | Multisig group | N members + threshold M; the unit of UTXO ownership on Safe | MIX address (members sorted + threshold) or `members_hash` + `threshold` in API params |
 | MTG worker | A server that is a member of a multisig group, co-signing group transactions | Its own user uuid inside the group → mtg.md |
-| Cashier | Mixin's fee/withdrawal service, uuid `674d6776-d600-4346-af46-58ee77d8df185` (Go `MixinFeeUserId`; Node `MixinCashier`) | Appears as fee recipient in withdrawal outputs |
+| Cashier | Mixin's fee/withdrawal service, uuid `674d6776-d600-4346-af46-58e77d8df185` (Go `MixinFeeUserId`; Node `MixinCashier`) | Appears as fee recipient in withdrawal outputs |
 | Sequencer | Indexer + `/safe/*` API host | `api.mixin.one` (Go `SetBaseUri`) |
 | Kernel | Validation layer behind everything | JSON-RPC only (`CallKernelRPC`); do not broadcast through it |
 
@@ -29,7 +29,8 @@ Mixin is not a smart-contract chain. It is a UTXO payment network with a messeng
 
 - `asset_id` — uuid of the asset (e.g. XIN = `c94ac88f-4671-3976-b60a-09064f1811e8`). Stable, canonical identifier for payments.
 - `chain_id` — uuid of the hosting external chain (e.g. Bitcoin, Ethereum). An asset lives on one chain; many assets share a chain.
-- **Precision is always 8** decimal places. Amounts are decimal **strings** (`"1.5"`), never floats — float math corrupts the last digits, which are money.
+- **Mixin amounts carry at most 8** decimal places. Amounts are decimal **strings** (`"1.5"`), never floats, because float math corrupts the last digits, which are money. (The asset's `precision` field is the *origin chain's* decimals, e.g. 18 for ETH. It is not the Mixin amount precision.)
+- **One symbol, many assets.** "USDT" on Ethereum, Tron, Polygon, BSC, Solana… are *different* `asset_id`s with different `chain_id`s and are not interchangeable. A payment in the wrong one is not the payment you asked for. Key everything on `asset_id`, never on `symbol`. Confirm an id before hardcoding it: `GET /safe/assets/:id` returns `symbol`, `chain_id`, `asset_key` (the contract address / token id on the origin chain), `dust` (minimum transfer amount, see error `20120`), `withdrawal_memo_possibility` (whether withdrawals need a tag/memo), `confirmations` and `price_usd` (docs: api/tokens/token.md). Batch: `POST /safe/assets/fetch` with an id array. Go `FetchAssets(ctx, ids, su)` (`/safe/assets/fetch`), or `ReadAsset(ctx, id)` for the public no-auth `/network/assets/:id`; Node `client.safe.fetchAsset(id)` / `client.safe.fetchAssets(ids)`.
 - `KernelAssetID` vs `AssetID` in snapshot views: same coin, kernel-native id vs sequencer id; carry both when reconciling → reconciliation.md.
 
 ### Naming trap: XIN vs "MixinAssetID"
@@ -39,7 +40,7 @@ Mixin is not a smart-contract chain. It is a UTXO payment network with a messeng
 | XIN asset id | `c94ac88f-4671-3976-b60a-09064f1811e8` | XIN, Mixin's native token (used for storage/Computer fees) |
 | Node `MixinAssetID` | `43d61dcd-e413-450d-80b8-101d5e903357` | **Ethereum** (the ETH asset) — misleading name; never use it as "XIN" |
 
-(go: constants via gt.md verification of withdrawal.go / node dist/index.d.ts 7.6.0)
+(go: withdrawal.go v3.25.7 / node dist/index.d.ts 7.6.0)
 
 ### Balances are derived, not stored
 
@@ -114,7 +115,7 @@ Reading money: same REST surface (`/safe/outputs`, `/safe/snapshots`) works for 
 
 ## Sources
 
-- docs: api/sequencer/overview.md, api/sequencer/outputs.md (repo snapshot 2026-10-05 at /tmp/sdksrc/developers.mixin.one-HEAD)
+- docs: api/sequencer/overview.md, api/sequencer/outputs.md (developers.mixin.one repo, content last changed 2026-08-02)
 - go: mix.go, withdrawal.go, output.go, snapshot.go v3.25.7
 - node: dist/index.d.ts + dist/index.js 7.6.0 (MixinCashier/XINAssetID/MixinAssetID constants)
-- gt.md verified baseline 2026-10-11
+- verified 2026-10-11 (→ compatibility.md)

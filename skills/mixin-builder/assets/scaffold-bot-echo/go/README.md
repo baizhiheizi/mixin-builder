@@ -5,14 +5,13 @@ Minimal Blaze echo bot: replies `echo: <text>` to every inbound `PLAIN_TEXT`.
 ## Run
 
 ```bash
-go mod tidy          # resolves transitive deps (mixin, gofrs/uuid, ...)
-KEYSTORE=/path/to/keystore.json go run .
+KEYSTORE=/path/to/keystore.json go run .   # go.mod + go.sum are committed (pinned dependency hashes)
 ```
 
 Behavior:
 
 - Keystore path from `--keystore` or `$KEYSTORE`; missing → usage on stderr, exit 1, no network.
-- Only `app_id`, `session_id`, `session_private_key` are read — a messaging-only keystore works; the **spend key is never needed** and never loaded.
+- Only `app_id`, `session_id`, `session_private_key` are read (legacy dashboard `client_id` / `private_key` are mapped automatically) — a messaging-only keystore works; the **spend key is never needed** and never loaded.
 - Keystore contents are never logged.
 
 ## What it demonstrates

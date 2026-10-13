@@ -11,7 +11,7 @@ Core invariants (from the computer repo README, verified in source):
 
 Deployment config shape (`config/example.toml`, verified in MixinNetwork/computer HEAD 2026-10-11): `[computer]` — `app-id` (group id), `threshold` (MPC threshold, "recommended to be 2/3 of the mtg members count"), `asset-id`, `observer-id`, `operation-price-asset-id`/`operation-price-amount` (XIN price per operation), `mixin-rpc`, `solana-rpc`, `solana-key` (payer key, group-held), `mpc-key-number`; `[computer.mtg.genesis]` — `members[]`, `threshold` ("must not be smaller than the mpc threshold"), `epoch`. The HTTP node listens on port **7081** behind computer.mixin.one (`solana/http.go:44`).
 
-→ custody-and-ops.md for key custody rails; → transactions.md for Safe tx building/signing; → payments.md for plain transfers.
+→ custody-and-ops.md for key custody rails; → payments.md for Safe tx building/signing, storage entries, and plain transfers.
 
 ## Public read/write API (computer.mixin.one, no auth)
 
@@ -29,7 +29,7 @@ CORS-enabled, port 7081 origin (`solana/http.go:26-48`). Go SDK wraps all of the
 | `POST /nonce_accounts` | lock a spare nonce for a user | body `{"mix":"MIX..."}` (registered users only; 404 `user` if not) → `{mix, nonce_address, nonce_hash}`; **429 `nonce limit`** if too many nonces held |
 | `POST /fee` | quote rent SOL in XIN | body `{"sol_amount":"0.05"}` → `{fee_id, xin_amount}` |
 
-Sources: `solana/http.go` (routes lines 33-42, handlers), Go `computer.go v3.25.7`. Prices/members/payer are **live values — re-fetch `GET /` every run**; operation price was `0.001` XIN on 2026-10-11 (live probe, gt.md) while the repo example ships `0.0001` — never hardcode.
+Sources: `solana/http.go` (routes lines 33-42, handlers), Go `computer.go v3.25.7`. Prices/members/payer are **live values — re-fetch `GET /` every run**; operation price was `0.001` XIN on 2026-10-11 (live probe) while the repo example ships `0.0001` — never hardcode.
 
 ## Identity mapping
 
@@ -94,7 +94,7 @@ The reliable end-to-end shape. Prerequisites: registered user (`uid`, `chain_add
 2. **Lock a nonce**: `POST /nonce_accounts {"mix": mixAddr}` → `{nonce_address, nonce_hash}`. One nonce per call; a locked nonce is consumed by exactly one system call (`call_id` binding visible in `GET /nonce_accounts/:mix`). Lock immediately before building the tx — the nonce hash is your durable blockhash.
 3. **Build the Solana tx**: payer = `payer` from `GET /`; **first instruction = advance nonce** on `nonce_address`; use `nonce_hash` as the tx blockhash (durable, no 60s expiry); versioned message; signers = none (group MPC signs). Check size ≤ 1232 (`checkSystemCallSize`, Node). Use `GET /address_lookup_tables` if needed to fit.
 4. **Rent/top-up (optional)**: if the call creates accounts needing SOL rent, estimate the SOL amount and `POST /fee {"sol_amount": "..."}` → `{fee_id, xin_amount}`. Include `fee_id` in the SystemCall extra and `price + xin_amount` as the payment amount.
-5. **Storage entry**: the serialized Solana tx bytes go in a XIN **storage transaction** — `extra > 256B` can't ride a normal tx (→ transactions.md); cost = `ceil(len/1024) * 0.0001` XIN (`estimateStorageCost` / `getRecipientForStorage` Node; `EstimateStorageCost`/`CreateObjectStorageTransaction` Go).
+5. **Storage entry**: the serialized Solana tx bytes go in a XIN **storage transaction** — `extra > 256B` can't ride a normal tx (→ payments.md § Large extras); cost = `ceil(len/1024) * 0.0001` XIN (`estimateStorageCost` / `getRecipientForStorage` Node; `EstimateStorageCost`/`CreateObjectStorageTransaction` Go).
 6. **System-call entry**: XIN payment to the group MTG address, amount = `price (+ xin_amount if fee)`, extra = SystemCall extra (with your uid, callID, skipFlag, feeID?), `references = [storage tx hash]` (resolve the storage request to its real transaction hash first).
 7. **Submit entries in order**: storage tx first, wait for its hash, then the system-call tx referencing it. With a MIN invoice, entries pay atomically in sequence; each operational tx resolves its index references into real hashes before signing.
 8. **Poll**: `GET /system_calls/:callID`. State machine (server source `solana/http.go` + `store/call.go`): `initial → pending → done | failed`. Terminal success is **`done`** (not "confirmed"). On `failed`, the response carries `reason` (from `store.ReadFailReason`) and `refund_traces[]` — refund XIN moves back to your MIX address under those trace ids. `subs[]` shows observer-generated sub-calls (prepare/post-process) with their own `state`/`hash`.
@@ -115,13 +115,13 @@ The reliable end-to-end shape. Prerequisites: registered user (`uid`, `chain_add
 ## Per-language pointers
 
 - **Go** (`bot-api-go-client/v3` v3.25.7, `computer.go`): `GetComputerInfo`, `GetComputerUser`, `GetComputerDeployedAssets`, `GetComputerSystemCall`, `GetComputerNonceAccounts(mix)`, `LockComputerNonceAccount(mix)`, `GetFeeOnXINBasedOnSOL(solAmount string)`, `RegisterComputer(ctx, su)`, `ComputerDeployExternalAsset`, plus all extra encoders. All free functions taking `ctx` first; no auth needed.
-- **Node** (`@mixin.dev/mixin-node-sdk` 7.6.0): encoding helpers only — `encodeMtgExtra`, `buildComputerExtra`, `buildSystemCallExtra`, `userIdToBytes`, `checkSystemCallSize`, `MAX_SOLANA_TX_SIZE`, `OperationType`, `buildMixAddress`. **No computer HTTP client** — fetch `https://computer.mixin.one` directly with axios/fetch; build the paying Safe tx with the standard utxo/safe helpers (→ transactions.md).
+- **Node** (`@mixin.dev/mixin-node-sdk` 7.6.0): encoding helpers only — `encodeMtgExtra`, `buildComputerExtra`, `buildSystemCallExtra`, `userIdToBytes`, `checkSystemCallSize`, `MAX_SOLANA_TX_SIZE`, `OperationType`, `buildMixAddress`. **No computer HTTP client** — fetch `https://computer.mixin.one` directly with axios/fetch; build the paying Safe tx with the standard utxo/safe helpers (→ payments.md § Sending money).
 - **Ruby** (`mixin_bot` 3.0.2): `MixinBot::ComputerApi` delegates to the same HTTP endpoints; MIX address via `MixinBot::MixAddress`; no dedicated encoder helpers [UNVERIFIED beyond README's delegation claim — verify gem version ≥ your target].
 
 ## Sources
 
 - MixinNetwork/computer repo HEAD (tarball 2026-10-11): `README.md`, `config/example.toml`, `solana/http.go` (routes, handlers, state strings), `store/call.go` (state machine).
 - live: computer.mixin.one `GET /` 2026-10-11 (members 7/threshold 5, payer, price 0.001 XIN, version v0.9.1-a37afa3).
-- go: computer.go, mix.go, chain.go v3.25.7 (`/tmp/sdksrc/github.com/MixinNetwork/bot-api-go-client/v3@v3.25.7/`).
+- go: computer.go, mix.go, chain.go v3.25.7.
 - node: dist/index.d.ts 7.6.0 (computer helpers, MAX_SOLANA_TX_SIZE, buildMixAddress).
 - ruby: mixin_bot 3.0.2 README.
