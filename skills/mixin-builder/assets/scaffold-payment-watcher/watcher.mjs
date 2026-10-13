@@ -3,8 +3,8 @@
 //
 // Verified symbols (mixin-builder references/compatibility.md 2026-10-11, @mixin.dev/mixin-node-sdk 7.6.0):
 //   MixinApi({ keystore }) -> client.safe.fetchSafeSnapshots({ asset?, offset?, limit?, order? })
-//   import { BlazeKeystoreClient } from '@mixin.dev/mixin-node-sdk/blaze'
-//     new BlazeKeystoreClient(keystore, { parse: true, syncAck: true }).loop({ onMessage })
+//   Blaze via ./blaze-client.mjs, not the SDK's BlazeKeystoreClient: 7.6.0 sends no User-Agent, the
+//   gateway answers the handshake with 10006 "Update required" and the SDK hangs silently (live-checked 2026-10-13).
 //   Message category SYSTEM_SAFE_SNAPSHOT arrives on Blaze.
 // Protocol: GET /safe/snapshots?offset=<created_at RFC3339NANO>&order=ASC — docs api/sequencer/snapshots.md.
 //   `order` is not in the docs or in Node's SafeSnapshotsRequest type, but the Ruby gem (mixin_bot 3.0.2
@@ -76,7 +76,7 @@ if (!keystore) {
 }
 
 const { MixinApi } = await import('@mixin.dev/mixin-node-sdk');
-const { BlazeKeystoreClient } = await import('@mixin.dev/mixin-node-sdk/blaze');
+const { startBlaze } = await import('./blaze-client.mjs');
 
 const client = MixinApi({ keystore });
 
@@ -208,11 +208,11 @@ function handleSnapshot(s) {
 
 // ---------- Blaze loop (trigger only — never the source of truth) ----------
 let wakePoller;
-const blaze = new BlazeKeystoreClient(keystore, {
-  parse: true,
-  syncAck: true, // SDK acks internally; un-acked frames get re-delivered 10–30× (→ references/blaze.md)
-});
-const blazeLoop = blaze.loop({
+// blaze-client acks each frame after onMessage resolves; un-acked frames are re-delivered 10–30× (→ references/blaze.md).
+startBlaze(keystore, {
+  userAgent: 'mixin-payment-watcher/1.0',
+  onOpen: () => console.log('blaze connected (trigger only)'),
+  onError: (err) => console.error(err.message),
   onMessage(msg) {
     // Any SYSTEM_SAFE_SNAPSHOT nudges the poller; reconciliation still reads /safe/snapshots.
     if (msg?.category === 'SYSTEM_SAFE_SNAPSHOT') {
@@ -244,7 +244,3 @@ function startPoller() {
 
 console.log(`payment watcher starting (mode=${opts.dryRun ? 'DRY-RUN' : 'LIVE'}, asset=${opts.asset ?? 'ALL'}, db=${opts.db})`);
 startPoller();
-blazeLoop.catch((err) => {
-  console.error(`blaze loop exited: ${err?.message ?? err}`);
-  console.error('poller keeps running on its interval; blaze auto-reconnects inside loop() (node sdk 7.6.0)');
-});

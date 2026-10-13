@@ -17,6 +17,16 @@ Last full verification: **2026-10-11** (method below). This file is the skill's 
 1. **Export surfaces** — every exported Go func/type grepped per file from the v3.25.7 zip; Node surface read from `dist/index.d.ts` + `dist/blaze/index.d.ts`; Ruby surface from the 3.0.2 README/API map. Symbols in `references/*` come only from these lists (plus `github.com/MixinNetwork/safe`'s `mtg` package for `mtg.md`, fetched the same way).
 2. **Prior-art correction** — the previous skill generation contained fabricated symbols (`PostMessage2`, `SafeSnapshotsRead`, `GhostKeyForRecipients`, `BuildSafeTransaction` as a Go name, `GetMe`, …). `gotchas.md` #12 lists the recurring ones. If you find a symbol in the wild that is not in `sdk-map.md`'s file map, assume it is invented until proven from source.
 3. **Live probes** — Computer info, npm registry, Go proxy, Rubygems (all 2026-10-11).
+4. **Live run with real bot keystores (2026-10-13)** — two unregistered test bots (`has_safe: false`, no spend key, so no money moved):
+   - `probe.mjs me/outputs/snapshots` work.
+   - All three echo scaffolds (Node, Go, Ruby on Ruby 4.0.7) passed a round trip: bot A sends a nonce, the scaffold on bot B replies `echo: <nonce>`. The Ruby run also answered a message sent while it was down, so `LIST_PENDING_MESSAGES` redelivery works.
+   - The payment watcher starts and its Blaze trigger connects.
+   - Found along the way:
+     - Node SDK 7.6.0 `BlazeKeystoreClient` can't connect: no `User-Agent`, so the handshake gets `10006` (→ gotchas.md #19).
+     - The Node SDK's REST client works (axios sends its own UA).
+     - `/safe/me` returns `has_safe: false` for unregistered bots rather than failing.
+     - `mixin_bot` 3.x needs Ruby ≥ 4.0, and its `configure` block uses `instance_exec`.
+   - Not verified: whether `/safe/snapshots` honours `order=ASC`. Both ledgers were empty, and the server accepts any `order` value without error (`BOGUS` included), so re-run `probe.mjs snapshots` on a bot with ≥ 2 snapshots.
 
 ## Re-verify instructions (quarterly, or on demand)
 

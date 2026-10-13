@@ -230,7 +230,7 @@ function checkScaffolds() {
     sh("sh", ["-c", "command -v go >/dev/null && go version >/dev/null 2>&1"]);
     const gos = path.join(ASSETS, "scaffold-bot-echo", "go");
     if (fs.existsSync(gos)) {
-      try { sh("go", ["build", "./..."], { cwd: gos }); console.log("scaffold: go build OK"); }
+      try { sh("go", ["build", "-o", fs.mkdtempSync(path.join(os.tmpdir(), "mixin-gobuild-")) + path.sep, "./..."], { cwd: gos }); /* -o tmp dir: a bare build drops the binary into the scaffold */ console.log("scaffold: go build OK"); }
       catch (e) { failures.push(`go scaffold build failed:\n${e.message}`); }
     }
   } catch { console.log("scaffold: go not installed — go scaffold not compiled (CI covers)"); }

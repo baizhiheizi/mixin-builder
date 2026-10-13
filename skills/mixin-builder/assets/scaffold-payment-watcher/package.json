@@ -9,6 +9,7 @@
     "start": "node watcher.mjs"
   },
   "dependencies": {
-    "@mixin.dev/mixin-node-sdk": "^7.6.0"
+    "@mixin.dev/mixin-node-sdk": "^7.6.0",
+    "ws": "^8.21.3"
   }
 }

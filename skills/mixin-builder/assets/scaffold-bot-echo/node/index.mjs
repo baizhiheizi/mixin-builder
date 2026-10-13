@@ -10,7 +10,8 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { MixinApi } from '@mixin.dev/mixin-node-sdk';
-import { BlazeKeystoreClient } from '@mixin.dev/mixin-node-sdk/blaze';
+// Not the SDK's BlazeKeystoreClient: it sends no User-Agent and hangs on a 10006 handshake (see blaze-client.mjs).
+import { startBlaze } from './blaze-client.mjs';
 
 const USAGE = `usage: node index.mjs [--keystore path]   (or set $KEYSTORE)
 
@@ -48,13 +49,12 @@ function deterministicReplyId(inboundId) {
   ].join('-');
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
 const keystore = loadKeystore();
 const client = MixinApi({ keystore });
-const blaze = BlazeKeystoreClient(keystore, { parse: true, syncAck: true });
 
-const handler = {
+startBlaze(keystore, {
+  userAgent: 'mixin-echo-bot/1.0',
+  onOpen: () => console.log(`blaze connected as ${keystore.app_id}; message the bot to test`),
   async onMessage(msg) {
     // Ignore non-text categories and our own messages.
     if (msg.category !== 'PLAIN_TEXT' || msg.user_id === keystore.app_id) return;
@@ -67,29 +67,7 @@ const handler = {
       category: 'PLAIN_TEXT',
       data_base64: Buffer.from(`echo: ${text}`, 'utf8').toString('base64'),
     });
-    // syncAck: true → the SDK sends ACKNOWLEDGE_MESSAGE_RECEIPT itself
-    // after this handler resolves; do not ack manually.
+    // blaze-client acks after this resolves. If sendOne throws, the message stays
+    // un-acked and is redelivered; the deterministic reply id makes the retry safe.
   },
-  onAckReceipt(_msg) {}, // receipts for our outgoing messages
-};
-
-// BlazeKeystoreClient.loop auto-reconnects internally; this outer loop only
-// handles fatal errors (bad keystore, unrecoverable socket) with backoff
-// 1s..60s cap (x2, jitter), reset after a healthy 60s run.
-let backoff = 1000;
-for (;;) {
-  const started = Date.now();
-  try {
-    await new Promise((_resolve, reject) => {
-      blaze.loop({ ...handler, onMessage: (m) => Promise.resolve(handler.onMessage(m)).catch(reject) });
-      // loop() returns immediately; keep the promise pending while connected.
-    });
-  } catch (err) {
-    if (Date.now() - started > 60_000) backoff = 1000;
-    const wait = backoff / 2 + Math.random() * backoff;
-    console.error(`blaze fatal: ${err?.message ?? err}; retrying in ${Math.round(wait)}ms`);
-    await sleep(wait);
-    backoff = Math.min(backoff * 2, 60_000);
-    try { blaze.stopLoop(); } catch { /* not looping */ }
-  }
-}
+});

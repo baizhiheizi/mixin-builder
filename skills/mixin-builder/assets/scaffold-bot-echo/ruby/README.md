@@ -1,5 +1,7 @@
 # Ruby echo bot (mixin_bot ~> 3.0)
 
+Requires **Ruby ≥ 4.0**: mixin_bot 3.x declares `required_ruby_version >= 4.0.0`, so `bundle install` fails on 3.4 with "Could not find compatible versions".
+
 Minimal Blaze echo bot: replies `echo: <text>` to every inbound `PLAIN_TEXT`.
 
 ## Run

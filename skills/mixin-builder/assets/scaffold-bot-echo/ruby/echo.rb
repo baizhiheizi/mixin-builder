@@ -18,6 +18,8 @@ require 'faye/websocket'
 require 'json'
 require 'mixin_bot'
 
+$stdout.sync = true # flush logs immediately under systemd/docker/pipes
+
 USAGE = <<~USAGE
   usage: ruby echo.rb [--keystore path]   (or set KEYSTORE)
 
@@ -46,10 +48,11 @@ def deterministic_reply_id(inbound_id)
 end
 
 KEYSTORE = load_keystore
-MixinBot.configure do |config|
-  config.app_id = KEYSTORE['app_id']
-  config.session_id = KEYSTORE['session_id']
-  config.session_private_key = KEYSTORE['session_private_key']
+# mixin_bot 3.x runs this block with instance_exec: use self.x =, not a |config| param (that is nil).
+MixinBot.configure do
+  self.app_id = KEYSTORE['app_id']
+  self.session_id = KEYSTORE['session_id']
+  self.session_private_key = KEYSTORE['session_private_key']
 end
 
 API = MixinBot.api

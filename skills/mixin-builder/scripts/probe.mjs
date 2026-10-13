@@ -128,6 +128,8 @@ async function apiGet(path, token) {
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       "X-Request-Id": crypto.randomUUID(),
+      // Without an explicit UA, Node's fetch sends "node" and the API answers 10006 "Update required".
+      "User-Agent": "mixin-builder-probe/1.0",
     },
   });
   const json = await res.json().catch(() => ({}));
@@ -166,7 +168,9 @@ async function cmdMe(ksPath) {
   const me = await apiGet("/safe/me", token);
   console.log(`# GET /safe/me @ ${stamp()}`);
   console.log(JSON.stringify(me, null, 2));
-  console.log(`\nsequencer-registered: ${Boolean(me?.user_id)}; if this fails with 401 → JWT/signing issue (see references/identity-and-keys.md § Request auth).`);
+  // has_safe is the Safe-registration flag (go: cli/register.go checks me.HasSafe v3.25.7); user_id is present either way.
+  console.log(`\nauth: ok (a 401 here would mean a JWT/signing issue → references/identity-and-keys.md § Request auth)`);
+  console.log(`safe-registered (has_safe): ${me?.has_safe === true}${me?.has_safe ? "" : " — messaging works, but register before moving money: POST /safe/users (references/identity-and-keys.md)"}`);
 }
 
 // Exact 8-decimal fixed-point sum: balances are decimal strings and floats corrupt them.

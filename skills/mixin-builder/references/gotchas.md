@@ -1,12 +1,12 @@
 # Gotchas — ranked war stories (symptom → cause → fix)
 
-Ordered by how often they bite (16–18 added 2026-10-12, not yet ranked). Each entry: what you see, why it happens, the fix, and how to prevent it. Error-code lookups: `common-errors.md`. Deeper domain context: linked references.
+Ordered by how often they bite (16–19 added 2026-10-12/13, not yet ranked). Each entry: what you see, why it happens, the fix, and how to prevent it. Error-code lookups: `common-errors.md`. Deeper domain context: linked references.
 
 ## 1. Blaze retransmit storm → gateway IP block
 
 **Symptom:** every inbound message arrives 10–30×; frame rates of thousands/minute; ~70-minute reconnect storms; eventually your server IP is blocked *per gateway* (bot works from other IPs, dies from yours).
 **Cause:** not acking `ACKNOWLEDGE_MESSAGE_RECEIPT` (or acking frames you never processed and crashing mid-loop). The gateway treats un-acked as undelivered and re-sends, forever.
-**Fix:** ack every frame your handler processed — after processing, not before (`syncAck: true` in Node `BlazeKeystoreClient`, `SyncAck() bool` in Go `BlazeListener`, `blaze_ack_policy :after_handler` in the Ruby Puma plugin) — plus one global reconnect backoff (1s→2s→…→60s, jitter). Handlers stay idempotent on `message_id` because at-least-once redelivery is a design property, not a bug.
+**Fix:** ack every frame your handler processed — after processing, not before (Node: `blaze-client.mjs` in the echo scaffold acks after the handler, since the SDK's `BlazeKeystoreClient` can't connect, see #19; `SyncAck() bool` in Go `BlazeListener`, `blaze_ack_policy :after_handler` in the Ruby Puma plugin) — plus one global reconnect backoff (1s→2s→…→60s, jitter). Handlers stay idempotent on `message_id` because at-least-once redelivery is a design property, not a bug.
 **Evidence:** ohmy.xin incident 2026-09-28 (5,794 frames/min observed). Details: `blaze.md` § ACK semantics, § Reconnect doctrine, § Case study.
 
 ## 2. Change-UTXO not yet spendable → "insufficient" with balance showing
@@ -88,7 +88,7 @@ Ordered by how often they bite (16–18 added 2026-10-12, not yet ranked). Each 
 
 **Symptom:** fresh bot's transfers rejected; `/safe/me` shows not registered.
 **Cause:** Sequencer registration (TIP PIN + `POST /safe/users`) is a hard prerequisite — bots created before the Sequencer era don't have it implicitly.
-**Fix:** TIP migrate (`identity-and-keys.md` § TIP PIN) then register (§ Sequencer registration); `client.safe.checkRegisteration()` / `GET /safe/me` to verify.
+**Fix:** TIP migrate (`identity-and-keys.md` § TIP PIN) then register (§ Sequencer registration); `client.safe.checkRegisteration()` / `GET /safe/me` to verify: check `has_safe === true`, since an unregistered bot gets a normal user object back.
 
 ## 15. `mixin://pay` link opens empty sheet
 
@@ -113,3 +113,9 @@ Ordered by how often they bite (16–18 added 2026-10-12, not yet ranked). Each 
 **Symptom:** `401 Unauthorized` from the first request; or the Node SDK throws on signing; or a "missing app_id" error.
 **Cause:** legacy keystore shape (`client_id`, `private_key` base64url, `pin_token`) fed to code expecting `app_id`, `session_private_key` hex, `server_public_key`.
 **Fix:** map the fields (`identity-and-keys.md` § Keystore formats), or let `probe.mjs` / Ruby `MixinBot.configure` accept both. Verify with `node scripts/probe.mjs me --keystore ks.json` before writing any code.
+
+## 19. `10006 Update required` from a hand-rolled HTTP client
+
+**Symptom:** every signed request from your own `fetch` code returns HTTP 202 `{"code":10006,"description":"Update required."}`, while SDK REST calls with the same keystore work. Or a Node bot using the SDK's `BlazeKeystoreClient` never receives a single message and logs nothing (the WebSocket handshake gets the same 202 and the SDK waits forever). Easy to misread as a broken keystore or a dashboard setting.
+**Cause:** api.mixin.one and blaze.mixin.one check `User-Agent`. Missing, `node` (Node's `fetch` default) and `x` are rejected; `name/version` strings such as `my-bot/1.0`, `Go-http-client/1.1`, `axios/1.7.9` pass. Node's `ws` library (used by the SDK's Blaze client) sends none. Live-checked 2026-10-13 with the same JWT.
+**Fix:** set an explicit `User-Agent` such as `my-bot/1.0` on every HTTP request and WebSocket handshake. Go (`Bot-API-Go-Client` for REST, Go's default for Blaze) and Ruby (`mixin_bot/<version>`) already do. For Node Blaze use `assets/scaffold-bot-echo/node/blaze-client.mjs`. `common-errors.md` 10006.

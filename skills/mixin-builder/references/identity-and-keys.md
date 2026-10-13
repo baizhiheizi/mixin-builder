@@ -45,7 +45,7 @@ Two shapes exist in the wild, and the official "Create a App" page still shows t
 | `pin` (6 digits) | — | legacy PIN; you need it once as `old_pin` for TIP migration (→ § TIP PIN) |
 | — | `spend_private_key` (hex) | absent from legacy keystores: the app can read and message, but can't move Safe funds until TIP + registration are done |
 
-Ruby's `MixinBot.configure` accepts both name sets (`client_id`→`app_id`, `private_key`→`session_private_key`, `pin_token`→`server_public_key`; mixin_bot 3.0.2 `configuration.rb`), and so does `scripts/probe.mjs`. **First check on any new keystore:** `node scripts/probe.mjs me --keystore ks.json` shows whether the key authenticates and whether the app is Sequencer-registered.
+Ruby's `MixinBot.configure` accepts both name sets (`client_id`→`app_id`, `private_key`→`session_private_key`, `pin_token`→`server_public_key`; mixin_bot 3.0.2 `configuration.rb`), and so does `scripts/probe.mjs`. **First check on any new keystore:** `node scripts/probe.mjs me --keystore ks.json` shows whether the key authenticates and whether the app is Safe-registered (`has_safe`).
 
 Passing the whole keystore through one global config is the classic leak; structure imports so a messaging crash dump can't contain the spend hex.
 
@@ -100,7 +100,7 @@ The signature is ed25519 over the body, then the *signature* is encrypted like a
 
 Before the sequencer indexes a bot's Safe activity it must be registered: this binds the TIP public key and PIN (docs: api/sequencer/registration.md).
 
-1. Check first: `GET /safe/me` — node `client.safe.checkRegisteration()`; go `bot.RequestUserMe(ctx, su)` (hits `/safe/me`). A registered response contains the Safe user view; an unregistered one doesn't. Don't blind-register.
+1. Check first: `GET /safe/me` — node `client.safe.checkRegisteration()`; go `bot.RequestUserMe(ctx, su)` (hits `/safe/me`). Read the **`has_safe`** boolean (go `User.HasSafe`; the Go SDK's `cli/register.go` gates on it). An unregistered bot still gets a full user object back, with `has_safe: false`, so "the call succeeded" or "`user_id` is present" does not mean registered (live-checked 2026-10-13). Don't blind-register.
 2. Register: `POST /safe/users` with:
 
 ```json
@@ -113,7 +113,7 @@ Before the sequencer indexes a bot's Safe activity it must be registered: this b
 
 The signature is signed with the **session** private key over the sha256 digest; the `pin_base64` carries the TIP signature. SDK entries wrap all of it: node `client.safe.register(user_id, tipPin, priv)` (TIP PIN must exist first); ruby `MixinBot.api.safe_register`; go `bot.RegisterSafe` / `bot.RegisterSafeWithSetupPin` (safe_user.go).
 
-**Verify it worked** — poll `GET /safe/me`; assert the response now includes the registered public key / full Safe user view. Then confirm end-to-end with a dust transfer or `GET /safe/outputs` for the bot's 1-of-1 members set. → payments.md for the send flow.
+**Verify it worked** — poll `GET /safe/me`; assert `has_safe == true`. Then confirm end-to-end with a dust transfer or `GET /safe/outputs` for the bot's 1-of-1 members set. → payments.md for the send flow.
 
 ## OAuth (acting for Messenger users)
 
@@ -169,7 +169,7 @@ Bots can create users programmatically (docs: app/guide/create-network-user.md):
 3. Set up TIP (migrate flow above — bare users have no old pin, `old_pin` = blank).
 4. `safe.register(user_id, tipPin, priv)` to gain sequencer/spend capability.
 
-**Verify it worked** — with the new keystore: `GET /safe/me` (node `safe.checkRegisteration()`) shows registered, and a test `client.safe.assets()`/outputs read returns the account's (empty) state without error.
+**Verify it worked** — with the new keystore: `GET /safe/me` (node `safe.checkRegisteration()`) returns `has_safe: true`, and a test `client.safe.assets()`/outputs read returns the account's (empty) state without error.
 
 ## Dashboard app-security tab
 

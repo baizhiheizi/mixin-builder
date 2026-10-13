@@ -37,9 +37,11 @@ Each rail exists because skipping it loses money or floods the network. Expanded
 ## First hour on a new project
 
 1. **Get the keystore** from the developer dashboard (`developers.mixin.one` → app → Secret). Check which format it is: legacy `client_id`/`private_key`/`pin_token`, or Safe-era `app_id`/`session_private_key`/`server_public_key`/`spend_private_key` (→ `identity-and-keys.md` § Keystore formats).
-2. **Probe before coding**: `node scripts/probe.mjs me --keystore ks.json` shows whether auth works and whether the app is Sequencer-registered. `probe.mjs outputs` gives exact balances per `asset_id`. All probes are read-only.
+2. **Probe before coding**: `node scripts/probe.mjs me --keystore ks.json` shows whether auth works and whether the app is Safe-registered (`has_safe`, not just a successful response). `probe.mjs outputs` gives exact balances per `asset_id`. All probes are read-only.
 3. **Not registered?** You can receive messages but not send money: TIP migrate, then register (`identity-and-keys.md` § TIP PIN, § Sequencer registration).
-4. **Start from a scaffold** (`assets/`): echo bot (Go/Node/Ruby), OAuth web login, payment watcher. Use a second "test" app for development, never the production keystore.
+4. **Start from a scaffold** (`assets/`): echo bot (Go/Node/Ruby), OAuth web login, payment watcher. Use a second "test" app for development, never the production keystore. All three echo bots were run end to end against the live network on 2026-10-13.
+   - **Node:** don't use the SDK's `BlazeKeystoreClient` (7.6.0). It sends no `User-Agent`, gets `10006`, and hangs silently. Use the scaffold's `blaze-client.mjs`. Any raw `fetch` needs a `User-Agent: name/version` too (`gotchas.md` #19).
+   - **Ruby:** `mixin_bot` 3.x needs Ruby ≥ 4.0.
 5. **Pin `asset_id`s, not symbols**: "USDT" is several assets on several chains (`concepts.md` § Asset model).
 
 ## Task routing

@@ -57,7 +57,7 @@ Prompts like these work as-is; the skill routes the agent to the right reference
 | "Send 0.01 BTC to `bc1q…`" | Follows `references/payments.md`: decimal-string amount, stable `trace_id`, verifies the raw transaction for free via `/safe/transaction/requests`, only signs after you confirm, then polls to `spent` and shows you the snapshot as proof. |
 | "Has anyone paid the bot since yesterday?" | Walks snapshots per `references/reconciliation.md`: payer, asset, amount, trace — deduplicated on `snapshot_id`. |
 
-Sending requires the bot to be Sequencer-registered; if `probe.mjs me` says it isn't, the agent walks you through it via `references/identity-and-keys.md`.
+Sending requires the bot to be Sequencer-registered; if `probe.mjs me` reports `has_safe: false`, the agent walks you through it via `references/identity-and-keys.md`.
 
 ## What it covers
 
@@ -74,7 +74,7 @@ Sending requires the bot to be Sequencer-registered; if `probe.mjs me` says it i
 | MTG trusted groups | `references/mtg.md` | observer/signer/worker, determinism rules, thresholds, FROST |
 | Bot-as-app | `references/webview.md` | card → webview handoff, JS bridge, design conventions |
 | Links & encodings | `references/schemas.md` | `mixin://` families, pay URIs, MIX/MIN addresses, codes |
-| Failure lookup | `references/gotchas.md`, `references/common-errors.md` | 18 war stories; every error code → cause → fix |
+| Failure lookup | `references/gotchas.md`, `references/common-errors.md` | 19 war stories; every error code → cause → fix |
 | SDK navigation | `references/sdk-map.md` | canonical source file per topic per language |
 | Truth anchor | `references/compatibility.md` | verified-against matrix + re-verify instructions |
 

@@ -36,7 +36,7 @@ Actively released by Mixin Network. Flat package, import alias `bot`. Process-gl
 
 ## Node — `@mixin.dev/mixin-node-sdk` (≥ 7.6.0, node ≥ 20)
 
-Types: `dist/index.d.ts` (main) + `dist/blaze/index.d.ts` (Blaze subpath). Client: `MixinApi({keystore})` → namespaces `user message conversation utxo safe multisig transfer network address payment pin oauth asset attachment circle code collection external app`. Blaze: `import { BlazeKeystoreClient } from '@mixin.dev/mixin-node-sdk/blaze'`.
+Types: `dist/index.d.ts` (main) + `dist/blaze/index.d.ts` (Blaze subpath). Client: `MixinApi({keystore})` → namespaces `user message conversation utxo safe multisig transfer network address payment pin oauth asset attachment circle code collection external app`. Blaze: `import { BlazeKeystoreClient } from '@mixin.dev/mixin-node-sdk/blaze'` (a factory, no `new`), **but see Known gaps: it can't connect today**. REST calls are fine (axios sends its own User-Agent).
 
 | Topic | Namespace / export |
 |---|---|
@@ -46,7 +46,7 @@ Types: `dist/index.d.ts` (main) + `dist/blaze/index.d.ts` (Blaze subpath). Clien
 | Outputs & balances | `client.utxo.safeOutputs/safeAssetBalance/fetchSafeOutputs` |
 | Safe tx (full manual chain) | `getUnspentOutputsForRecipients`, `buildSafeTransactionRecipient`, `client.utxo.ghostKey`, `buildSafeTransaction`, `client.utxo.verifyTransaction`, `signSafeTransaction`, `client.utxo.sendTransactions`, `decodeSafeTransaction`, `blake3Hash` |
 | Fees / withdrawal | `client.safe.fetchFee(asset, destination)`; addresses `client.address.create(pin, {...})/delete(pin, id)` |
-| Snapshots | `client.safe.fetchSafeSnapshots({asset, opponent, offset, limit, order})` |
+| Snapshots | `client.safe.fetchSafeSnapshots({app, asset, opponent, offset, limit})`; `order` is not in the type but is passed through (→ reconciliation.md § Cursor management) |
 | Multisig | `client.multisig.createSafeMultisigs/fetchSafeMultisigs/signSafeMultisigs/unlockSafeMultisigs` |
 | Inscriptions | `client.safe.fetchInscription*`, `transferInscription`, `buildInscriptionOperationExtra` |
 | Invoices / storage | `newMixinInvoice`, `attachInvoiceEntry`, `attachStorageEntry`, `getRecipientForStorage`, `estimateStorageCost` |
@@ -57,11 +57,11 @@ Types: `dist/index.d.ts` (main) + `dist/blaze/index.d.ts` (Blaze subpath). Clien
 | Pay links | `buildMixinOneSafePaymentUri` |
 | Errors | `ResponseError{code, description, status, extra, requestId}` |
 
-**Known gaps (Node):** no Safe-multisig cancel; `payment` namespace is the checker API, not card payment.
+**Known gaps (Node):** no Safe-multisig cancel; `payment` namespace is the checker API, not card payment. **`BlazeKeystoreClient` (7.6.0) can't connect**: it opens the socket with no `User-Agent`, `blaze.mixin.one` rejects the handshake with HTTP 202 `10006 Update required`, and the client stays in CONNECTING forever with no error (live-checked 2026-10-13). `BlazeOptions` has no headers option. Use `assets/scaffold-bot-echo/node/blaze-client.mjs`, a ~90-line drop-in on `ws` + the SDK's `signAccessToken`/`decodeMessage`/`sendRaw` that sends a User-Agent (→ gotchas.md #19).
 
 ## Ruby — `mixin_bot` gem (≥ 3.0.2)
 
-Repo `an-lee/mixin_bot` (parity-mapped to the Go SDK; ships `API_COVERAGE.md`). Configure via `MixinBot.configure` or per-bot `MixinBot::API.new(...)`. API modules: Me/User/Asset/NetworkAsset/Transfer/Transaction/Output/Snapshot/Multisig/Withdraw/Conversation/Message/EncryptedMessage/Blaze/Attachment/Auth/Pin/Tip/Inscription/ComputerApi. Notables: `create_transfer(members:, asset_id:, amount:, memo:, trace_id:)` (Safe pipeline), `build_utxos`, `build_safe_transaction`, `sign_safe_transaction`, `send_safe_transaction`, `safe_snapshots`, `create_safe_multisig_request`, `MixinBot::MixAddress/Invoice/UrlScheme/Transaction`, Blaze via `start_blaze_connect` (EventMachine) / `blaze_async` / Puma plugin `:mixin_blaze` with `blaze_ack_policy :on_receipt|:after_handler`. Errors: `MixinBot::APIError` subclasses with `retryable?`/`throttle?`.
+Repo `an-lee/mixin_bot` (parity-mapped to the Go SDK; ships `API_COVERAGE.md`). **Requires Ruby ≥ 4.0** (gemspec `required_ruby_version >= 4.0.0`). Configure via `MixinBot.configure do self.app_id = … end` (the block runs with `instance_exec`: a `|config|` param is `nil`) or per-bot `MixinBot::API.new(...)`. API modules: Me/User/Asset/NetworkAsset/Transfer/Transaction/Output/Snapshot/Multisig/Withdraw/Conversation/Message/EncryptedMessage/Blaze/Attachment/Auth/Pin/Tip/Inscription/ComputerApi. Notables: `create_transfer(members:, asset_id:, amount:, memo:, trace_id:)` (Safe pipeline), `build_utxos`, `build_safe_transaction`, `sign_safe_transaction`, `send_safe_transaction`, `safe_snapshots`, `create_safe_multisig_request`, `MixinBot::MixAddress/Invoice/UrlScheme/Transaction`, Blaze via `start_blaze_connect` (EventMachine) / `blaze_async` / Puma plugin `:mixin_blaze` with `blaze_ack_policy :on_receipt|:after_handler`. Errors: `MixinBot::APIError` subclasses with `retryable?`/`throttle?`.
 
 **Known gaps (Ruby):** Safe-multisig cancel; some helpers expect the optional `mixin` CLI for native raw-tx encode/decode.
 

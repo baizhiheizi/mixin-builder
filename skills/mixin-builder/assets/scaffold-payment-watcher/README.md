@@ -28,7 +28,7 @@ Two loops:
 
 | Loop | What | Why |
 |---|---|---|
-| Blaze | `new BlazeKeystoreClient(keystore, { parse: true, syncAck: true }).loop({ onMessage })`; on `SYSTEM_SAFE_SNAPSHOT` → wake the poller | push latency; SDK acks internally (`syncAck: true`) — un-acked frames are re-delivered 10–30× (see `references/blaze.md`) |
+| Blaze | `startBlaze(keystore, { onMessage })` from `blaze-client.mjs`; on `SYSTEM_SAFE_SNAPSHOT` → wake the poller | push latency; acks after the handler resolves — un-acked frames are re-delivered 10–30× (see `references/blaze.md`). Not the SDK's `BlazeKeystoreClient`: 7.6.0 sends no `User-Agent`, gets `10006`, and hangs silently |
 | Poller | every 15s: `client.safe.fetchSafeSnapshots({ limit: 100, offset: cursor, order: 'ASC' })`, draining pages until caught up; credit + cursor advance commit in one sqlite transaction | snapshots REST is the source of truth; survives Blaze downtime |
 
 Cursor rules:

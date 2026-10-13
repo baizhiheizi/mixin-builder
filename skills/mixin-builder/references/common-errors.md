@@ -12,7 +12,7 @@ Mixin returns errors as HTTP **202** with a JSON `{code, description, extra}` en
 | 404 | endpoint not found | typo'd path, or legacy path on Sequencer era | check endpoint against `payments.md`/docs `api/sequencer/*` |
 | 429 | Too Many Requests | rate limit (numbers undocumented) | global backoff, batch endpoints, Blaze over polling — `custody-and-ops.md` § Rate limits & retries |
 | 10002 | invalid field — **detail in `extra`** | schema violation (amount float, bad uuid, over-long field) | read `extra`; fix field; don't retry unchanged |
-| 10006 | app update required | app flagged for update in dashboard | update app settings/secret in dashboard |
+| 10006 | app update required | **missing or non-`name/version` `User-Agent`** on a REST call or the Blaze WebSocket handshake: Node's `fetch` sends `node`, and the `ws` library (Node SDK 7.6.0 `BlazeKeystoreClient`) sends none (live-checked 2026-10-13) | send `User-Agent: my-bot/1.0` or similar; for Node Blaze use the echo scaffold's `blaze-client.mjs` (→ gotchas.md #19) |
 | 10104 | address generating | deposit entry being provisioned | retry later (minutes) |
 | 10105 | locked by another transaction | outputs already referenced by a pending tx | wait for settle or use other outputs; same trace retry is safe |
 | 20116 | group chat is full | >256 participants | split groups / circles |

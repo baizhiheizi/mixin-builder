@@ -28,6 +28,8 @@ if (!APP_ID || !CLIENT_SECRET) {
 const AUTHORIZE_URL = 'https://mixin.one/oauth/authorize';
 const TOKEN_URL = 'https://api.mixin.one/oauth/token';
 const ME_URL = 'https://api.mixin.one/me';
+// Node's fetch sends `User-Agent: node`, which api.mixin.one answers with 10006 "Update required" (→ references/gotchas.md #19).
+const USER_AGENT = 'mixin-oauth-scaffold/1.0';
 const SCOPE = 'PROFILE:READ'; // required scope; more: ASSETS:READ, SNAPSHOTS:READ, ... (docs: api/oauth/scope.md)
 const STATE_TTL_MS = 10 * 60 * 1000;
 
@@ -97,7 +99,7 @@ const server = http.createServer(async (req, res) => {
       // token exchange (client_secret backend flow; code_verifier only for PKCE — see README)
       const tokenRes = await fetch(TOKEN_URL, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'user-agent': USER_AGENT },
         body: JSON.stringify({
           client_id: APP_ID,
           client_secret: CLIENT_SECRET,
@@ -114,7 +116,7 @@ const server = http.createServer(async (req, res) => {
       const scope = tokenJson.data?.scope;
 
       // profile read
-      const meRes = await fetch(ME_URL, { headers: { authorization: `Bearer ${accessToken}` } });
+      const meRes = await fetch(ME_URL, { headers: { authorization: `Bearer ${accessToken}`, 'user-agent': USER_AGENT } });
       const meJson = await meRes.json();
       if (!meRes.ok || meJson.error) {
         const d = meJson.error || {};
