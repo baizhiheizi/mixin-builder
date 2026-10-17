@@ -129,7 +129,7 @@ V1 (new style, no `action` key):
 | `description` | V0 required / V1 optional | 1 ≤ len ≤ 1024 | iOS link-detects identity numbers inside it |
 | `cover_url` | V1 | image URL, 16:10 aspect | plain-string cover |
 | `cover` | V1 | object `{url, mime_type, width, height, thumbnail}` | richer than `cover_url`: `thumbnail` is a **blurhash** string rendered instantly; ratio computed from width/height. iOS prefers `cover` when present with a usable `url` |
-| `actions[]` | V1 | 0–6 entries | `{label, color, action}`; omitted → no buttons (iOS decodes to `[]`) |
+| `actions[]` | V1 | **no count limit** | `{label, color, action}`; omitted → no buttons (iOS decodes to `[]`). "≤6" is APP_BUTTON_GROUP only — docs `msg_card` annotates no size (responses.js), Go `AppCardView.Actions` is a plain slice, and ios-app/ActionsCardHolder/flutter-app all render every action (iOS wraps at 3/line, `AppButtonsViewModel.maxNumberOfButtonsPerLine`). Effective cap = request body size (≤128 KB) |
 | `action` | V0 only | URL string | **legacy** — its presence forces V0 parsing; ignored in V1 |
 | `shareable` | V1 **required** / V0 optional | bool | ⚠️ iOS V1 decode **fails without the key** (renders nothing) — always send it. Android/Desktop tolerate absence (default true). Forwarding rules differ per client: iOS requires every action to be `mixin`/`http`/`https` (no `input:`); Desktop requires no `*://mixin.one/send` action |
 | `icon_url` | V0 required | URL | legacy thumbnail |

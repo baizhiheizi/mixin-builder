@@ -38,7 +38,7 @@ MessageView fields (Go): `conversation_id, user_id, message_id, category, data_b
 Categories (Node `MessageCategory` union + Go constants; docs: api/messages/category.md):
 
 - **PLAIN_***: TEXT, POST, IMAGE, DATA, VIDEO, AUDIO, STICKER, LIVE, LOCATION, CONTACT — user-typed content. ⚠️ A bot app with the `ENCRYPTED` capability receives the **`ENCRYPTED_*`** twins of these instead of PLAIN_* (→ messaging.md "App capabilities"); a `GROUP`-capable bot in a group chat receives text messages addressed `@700xxxx <text>` (its identity number) directly via `recipient_id`, with `data` cleared on the wire (ios-app@master).
-- **APP_CARD / APP_BUTTON_GROUP**: interactive cards/buttons the user tapped; `data_base64` decodes to the card JSON (Go `AppCardView`: app_id, cover_url, title ≤36, description, actions[] ≤6, shareable; full V0/V1 model → messaging.md).
+- **APP_CARD / APP_BUTTON_GROUP**: interactive cards/buttons the user tapped; `data_base64` decodes to the card JSON (Go `AppCardView`: app_id, cover_url, title ≤36 (docs), description, actions[] — **no count limit**, shareable; APP_BUTTON_GROUP: 1 ≤ size ≤ 6; full V0/V1 model → messaging.md).
 - **MESSAGE_RECALL**: user deleted a message; `data_base64` = recalled `message_id`.
 - **SYSTEM_CONVERSATION**: conversation lifecycle (participant add/remove/role); payload `{action, participant_id, user_id?, role?}` (go: `SystemConversationPayload`).
 - **SYSTEM_ACCOUNT_SNAPSHOT**: **LEGACY transfers only** (`TransferView`: snapshot_id, counter_user_id, asset_id, amount, trace_id, memo).
