@@ -11,6 +11,7 @@ Last full verification: **2026-10-11** (method below). This file is the skill's 
 | MTG libraries | `github.com/MixinNetwork/safe` **v0.28.2** (mtg package) · `github.com/MixinNetwork/multi-party-sig` **v0.7.0** (frost) | module-proxy zips, exports listed for `mtg.md` | `github.com/MixinNetwork/computer` HEAD (config/example.toml, solana/{node,observer,signer}.go, store/) read for `mtg.md` + `computer.md`. |
 | Official docs `developers.mixin.one` | docs content last changed **2026-08-02** (`48398f1`; default branch, `developers-docs/docs`) | `codeload.github.com/MixinNetwork/developers.mixin.one/tar.gz/HEAD` | MTG section deleted (commit `48398f1`); App-Security dashboard tab (commit `bd4dc94`, 2026-09-02) still undocumented. |
 | Endpoints | `api.mixin.one` REST, `wss://blaze.mixin.one` (subprotocols `Mixin-Blaze-1`, `Mixin-OAuth-1`) | SDK source + docs | Stable since 2026; blaze subprotocol confirmed in Go SDK `blaze.go` + `oauthws_test.go`. |
+| Mixin Messenger iOS `MixinNetwork/ios-app` | **master @ 2026-10-17** (v6.3.4, build 843) | shallow clone; read `MixinURL.swift`, `SafeURL.swift` + sub-parsers, `UrlWindow.checkUrl`, Info.plist | Source of truth for the deep-link surface in `schemas.md` §1/§1b and the multisig mobile sheet in `payments.md`. Info.plist registers only the `mixin` scheme. Android app **not** audited — treat Android deep-link parity as unverified. |
 
 ## What was verified, and how
 
@@ -27,6 +28,7 @@ Last full verification: **2026-10-11** (method below). This file is the skill's 
      - `/safe/me` returns `has_safe: false` for unregistered bots rather than failing.
      - `mixin_bot` 3.x needs Ruby ≥ 4.0, and its `configure` block uses `instance_exec`.
    - Not verified: whether `/safe/snapshots` honours `order=ASC`. Both ledgers were empty, and the server accepts any `order` value without error (`BOGUS` included), so re-run `probe.mjs snapshots` on a bot with ≥ 2 snapshots.
+5. **Mobile client deep links (2026-10-17)** — `MixinNetwork/ios-app` master (v6.3.4, build 843) shallow-cloned; every `mixin://` form in `schemas.md` §1/§1b traced to a parser (`MixinURL.swift`, `SafeURL.swift`, `MultisigURL`, `SafePaymentURL`, `TIPURL`, `TradeURL`, `CodeURL`, `ExternalSharingContext`) and to dispatch in `UrlWindow.checkUrl`. Found along the way: the multisig sign sheet `mixin://mixin.one/multisigs/{id}?action=sign|unlock|revoke` (default `sign`; opener must be in `senders`), the `sticker` share category + `?text=` send shortcut, the `/schemes/{uuid}` code path form, and the `mixin.one/snapshots/{id}` wrong-component quirk (id ignored — trace only).
 
 ## Re-verify instructions (quarterly, or on demand)
 

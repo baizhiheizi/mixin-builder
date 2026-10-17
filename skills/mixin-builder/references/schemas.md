@@ -10,6 +10,7 @@ Everything a human taps in Messenger: deep links, web pay URIs, MIX addresses, M
 | User pays your bot from Messenger chat | `mixin://pay` **or** `https://mixin.one/pay/{address}` (web, QR-friendly) |
 | One payment, multiple entries (multi-asset, memo per entry, storage extras) | MIN invoice |
 | Address a multisig group or a user canonically | MIX address |
+| A signer opens a multisig request on their phone | `mixin://mixin.one/multisigs/{request_id}?action=sign` → payments.md |
 | QR login (OAuth) | `mixin://codes/{code_id}` → identity-and-keys.md |
 | Share content into a chat | `mixin://send` |
 
@@ -22,13 +23,35 @@ Verified Go helpers (go: url_scheme.go v3.25.7; all build query-encoded URLs —
 | `mixin://users/{uuid}` | `SchemeUsers(userId)` | user profile popup |
 | `mixin://transfer/{uuid}` | `SchemeTransfer(userId)` | pre-filled transfer dialog to user |
 | `mixin://pay?asset=&trace=&recipient=&memo=&amount=` | `SchemePay(assetId, traceId, recipientId, memo, amount)` | payment page; query params: `asset` (asset uuid), `recipient` (user uuid), `amount` (decimal string), `trace` (optional UUID dedupe), `memo` |
-| `mixin://send?category=&data=&conversation=` | `SchemeSend(category, data, conversationID)` | share sheet; categories: `text, image, contact, app_card, live, post`; `data` = base64 (StdEncoding) of payload, itself query-escaped before encoding |
-| `mixin://apps/{appID}?action=open&k=v…` | `SchemeApps(appID, action, params)` | bot homepage with arbitrary params (invite codes etc.) |
+| `mixin://send?category=&data=&conversation=` | `SchemeSend(category, data, conversationID)` | share sheet; categories: `text, image, contact, app_card, live, post` (iOS also `sticker`, plus a `?text=…` raw-text shortcut and `user=` as destination); `data` = base64 (StdEncoding) of payload, itself query-escaped before encoding |
+| `mixin://apps/{appID}?action=open&k=v…` | `SchemeApps(appID, action, params)` | bot homepage with arbitrary params (invite codes etc.); with no/other `action` iOS opens the bot **profile** instead |
 | `mixin://codes/{code_id}` | `SchemeCodes(codeId)` | code info popup (also QR login → identity-and-keys.md) |
 | `mixin://conversations/{id}?user=` | `SchemeConversations(conversationID, userID)` | open conversation; creates it if absent |
 | `mixin://snapshots/{snapshotId}` (+ `trace=`) | `SchemeSnapshots(snapshotId, traceId)` | snapshot detail |
 
 Node/Ruby: no per-link builders in the Node SDK's helper set (only `buildMixinOneSafePaymentUri`); Ruby has `MixinBot::UrlScheme`. Use the query table above.
+
+Host-style extras iOS accepts beyond the Go helpers above (no SDK builders — construct and percent-encode yourself, §6): `mixin://address` (address book), `mixin://buy` (buy-crypto entry), `mixin://wc?uri={WalletConnectURI}` (WalletConnect pairing), `mixin://device/auth?id=&pub_key=` (desktop login; missing `id` → desktop-upgrade alert), `mixin://device-transfer?data={base64url JSON}` (device migration). Any other external `mixin://…` is not rejected — iOS shows a generic fallback sheet (`UnknownURLWindow`). `mixin-internal://identity/{number}` and `mixin-internal://phone/{phone}` fire on in-chat taps only; Info.plist registers just `mixin` for third parties.
+
+## 1b. `mixin://mixin.one/…` path-form links (iOS `SafeURL`)
+
+A second, newer family: scheme `mixin` **or** `https` with host exactly `mixin.one` — every link below doubles as a universal link (`https://mixin.one/…`, better for QR/email/browser). Dispatch order in iOS `UrlWindow.checkUrl`: `SafeURL` → host-style `MixinURL` (§1) → `mixin-internal://`. Verified from ios-app@master 2026-10-17 (v6.3.4): `SafeURL.swift` + sub-parsers (`SafePaymentURL`, `MultisigURL`, `TIPURL`, `TradeURL`, `CodeURL`, `ExternalSharingContext`). No SDK builders exist — build with a URL-components API and percent-encode (§6).
+
+| Link | Shape |
+|---|---|
+| `mixin://mixin.one/pay/{address}?asset=&amount=&trace=&memo=&return_to=&reference=&inscription=&inscription_collection=` | same parser as §2 web pay; `{address}` = user uuid / XIN mainnet / MIX / **MIN invoice string**; `amount` ≤ 8 fractional digits and > 0; `trace` defaults to a fresh uuid client-side |
+| `mixin://mixin.one/multisigs/{request_id}?action=` | multisig sign/revoke sheet → payments.md; `action` = `sign` (default when omitted) \| `revoke` or `unlock` (both revoke); `request_id` must be a lowercased uuid; opener must be one of the request's `senders` |
+| `mixin://mixin.one/schemes/{scheme_id}` | code popup (lowercased uuid) — path twin of `mixin://codes/{id}` |
+| `mixin://mixin.one/tip/sign?chain=&action=&raw=&request_id=` | TIP sign request; `chain` must be `solana`, `action` must be `signRawTransaction`, `raw` required, `request_id` optional uuid |
+| `mixin://mixin.one/swap` or `/trade?type=&input=&output=&referral=` | trade UI; `type` = `swap` \| `limit` \| `perps` (absent → default trading mode); perps: `market` required, then `action=open` (+ `side`, `leverage`, `margin`, `leader_position`) \| `action=add_margin` (+ `margin`) \| no action → market detail |
+| `mixin://mixin.one/send?…` | share sheet — same params as `mixin://send` |
+| `mixin://mixin.one/referrals` (+ `/{code}`) | referral-code entry sheet |
+| `mixin://mixin.one/membership` | membership plans |
+| `mixin://mixin.one/inscriptions/{hash}` | inscription detail (hash-validated) |
+| `mixin://mixin.one/markets/{id}` | market detail |
+| `mixin://mixin.one/codes/{code_id}` · `/users/{uuid}` · `/transfer/{uuid}` · `/conversations/{id}?user=` · `/apps/{id}` · `/address` · `/wc?uri=` · `/buy` | path-forms of §1 links, same behavior |
+
+iOS quirk: `mixin://mixin.one/snapshots/{snapshotId}` parses but the handler reads the wrong path component, so the **id is ignored** — only `?trace=` works there. Use the §1 host-style `mixin://snapshots/{snapshotId}` (id works) or a `trace=` query on either form.
 
 ## 2. Web pay URIs — `https://mixin.one/pay/{address}`
 
@@ -104,6 +127,7 @@ When to choose MIN over a pay URI: multiple assets in one payment, per-entry mem
 - OAuth QR flow renders `mixin://codes/{code_id}` from the Blaze OAuth WS (`REFRESH_OAUTH_CODE` → `data.code_id`); user scans/confirms → `data.authorization_code` → PKCE exchange. Full flow → identity-and-keys.md.
 - A code can also front other objects (conversations, multisig requests, payment requests, users): `CodeResponse` is a union (node: dist/index.d.ts 7.6.0).
 - Resolution server-side: `GET /codes/{codeID}` (Node `code.fetch`, Go `ReadCode`/`ReadMultisigByCode`).
+- On iOS a code also opens via the path form `mixin://mixin.one/schemes/{scheme_id}` (≠ `mixin://codes/{id}`, both valid — see §1b).
 - Reverse — turn a `mixin://`-style target into a scheme id: `POST /schemes` `{target}` → `{type:'scheme', scheme_id, target}` (Node `code.schemes(target)`).
 
 ## 6. Percent-encoding rule (injection guard)
@@ -126,5 +150,6 @@ Domain rule: treat every deep link you *emit* as a serializer (encode) and every
 
 - go: url_scheme.go, mix.go, invoice.go v3.25.7
 - node: dist/index.d.ts + dist/index.js 7.6.0 (`buildMixinOneSafePaymentUri`, PaymentParams, CodeClient.schemes `/schemes`, invoice helpers)
+- iOS client: MixinNetwork/ios-app master @ 2026-10-17 (v6.3.4, build 843) — `Mixin/Constants/MixinURL.swift`, `Mixin/UserInterface/Controllers/Wallet/Payment/{SafeURL,SafePaymentURL,MultisigURL,TIPURL,TradeURL,CodeURL}.swift`, `Mixin/Service/Message/ExternalSharingContext.swift`, dispatch in `Mixin/UserInterface/Windows/UrlWindow.swift`, Info.plist (registers only `mixin`)
 - docs: schema deep-link sections referenced by Go doc comments (developers.mixin.one/docs/schema)
-- verified 2026-10-11 (→ compatibility.md)
+- SDK parts verified 2026-10-11; deep-link surface re-verified against the iOS client 2026-10-17 (→ compatibility.md)
