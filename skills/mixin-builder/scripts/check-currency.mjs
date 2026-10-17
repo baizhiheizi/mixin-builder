@@ -16,6 +16,9 @@
 //           (date of the latest default-branch commit touching doc content — repo pushed_at
 //            also moves on dependabot/branch pushes and raised false drift alarms)
 //   Computer: https://computer.mixin.one/ (live version string)
+//   Repos : ios-app / android-app / flutter-app / mixin_bot_sdk_dart default branches
+//           (api.github.com compare — drift only when commits touch the watched files
+//            cited in references/*; these repos push daily, SHA alone would always fire)
 // Zero npm deps. Needs `tar` (bsdtar handles zip+tgz) or `unzip` for surface extraction.
 
 import { createHash } from "node:crypto";
@@ -31,6 +34,78 @@ const SKILL_ROOT = path.resolve(HERE, "..");
 const ASSETS = path.join(SKILL_ROOT, "assets");
 
 const GO_MODULE_PATH = "github.com/!mixin!network/bot-api-go-client/v3";
+
+// Mixin first-party code the skill cites file-by-file (compatibility.md matrix rows
+// "Mixin Messenger iOS/Android/Desktop" + "mixin_bot_sdk_dart"). These repos push
+// daily, so plain SHA tracking would fire every week; drift is only commits that
+// touch a watched path (the exact files behind verified claims in references/*).
+const REPOS = [
+  {
+    key: "ios-app",
+    repo: "MixinNetwork/ios-app",
+    branch: "master",
+    watch: [
+      "Mixin/Constants/MixinURL.swift",
+      "Mixin/UserInterface/Controllers/Wallet/Payment/", // SafeURL, MultisigURL, TIPURL, TradeURL, CodeURL, SafePaymentURL
+      "Mixin/UserInterface/Windows/UrlWindow.swift",
+      "Mixin/UserInterface/Controllers/Common/Web/", // WebViewMessageHandler, MixinWebViewController
+      "Mixin/UserInterface/Controllers/Common/Model/MixinWebContext.swift",
+      "Mixin/Service/Message/", // ExternalSharingContext, SendMessageService+Sending
+      "Mixin/Service/API/RouteAPI.swift",
+      "Mixin/UserInterface/Controllers/Chat/ConversationViewController.swift",
+      "MixinServices/MixinServices/Services/WebSocket/Model/", // AppCardData, AppButtonData, BlazeMessageParam, SystemConversationMessagePayload
+      "MixinServices/MixinServices/Database/User/Model/Message.swift", // MessageCategory
+      "MixinServices/MixinServices/Services/API/Response/MultisigResponse.swift", // MultisigAction
+      // Info.plist (registered URL schemes) deliberately NOT watched: release
+      // version bumps touch it weekly; scheme-set changes ship with router changes.
+    ],
+  },
+  {
+    key: "android-app",
+    repo: "MixinNetwork/android-app",
+    branch: "master",
+    watch: [
+      "app/src/main/java/one/mixin/android/ui/url/UrlInterpreterActivity.kt",
+      "app/src/main/java/one/mixin/android/ui/conversation/link/LinkBottomSheetDialogFragment.kt",
+      "app/src/main/java/one/mixin/android/Constants.kt", // Scheme object
+      "app/src/main/java/one/mixin/android/extension/UrlExtension.kt",
+      "app/src/main/java/one/mixin/android/ui/web/WebFragment.kt", // JS bridge
+      "app/src/main/java/one/mixin/android/tip/TipSign.kt",
+      "app/src/main/java/one/mixin/android/vo/App.kt", // AppCap + capabilites
+      "app/src/main/java/one/mixin/android/vo/EncryptCategory.kt",
+      "app/src/main/java/one/mixin/android/vo/Message.kt",
+      "app/src/main/java/one/mixin/android/websocket/BlazeMessageParam.kt",
+      // AndroidManifest.xml (intent-filter schemes) NOT watched — same reasoning as iOS Info.plist.
+    ],
+  },
+  {
+    key: "flutter-app",
+    repo: "MixinNetwork/flutter-app",
+    branch: "main",
+    watch: [
+      "lib/utils/uri_utils.dart", // desktop router
+      "lib/constants/constants.dart", // MixinSchemeHost, kMaxGroupParticipants
+      "lib/widgets/message/item/action_card/",
+      "lib/utils/web_view/", // desktop bridge
+      "lib/blaze/blaze_message_param.dart",
+      "lib/db/extension/app.dart",
+    ],
+  },
+  {
+    key: "mixin_bot_sdk_dart",
+    repo: "MixinNetwork/mixin_bot_sdk_dart",
+    branch: "master",
+    // Watched narrowly: the skill cites the Dart SDK today only as wire-format
+    // evidence (App.capabilites). If Dart becomes a first-class SDK in the skill,
+    // widen to lib/src/ and add a surface extraction like go/node.
+    watch: [
+      "lib/src/vo/app.dart",
+      "lib/src/vo/user.dart",
+      "lib/src/vo/mixin_response.dart",
+    ],
+  },
+];
+
 const failures = [];
 const notes = [];
 
@@ -196,6 +271,41 @@ function diffSurfaces(prev, next) {
   return lines.length ? lines.join("\n") : null;
 }
 
+// Track first-party Mixin repos: drift = commits on the default branch since the
+// baseline SHA that touch any watched path. Uses the compare API (one request)
+// which returns the aggregate file list for the whole range (≤300 files, flagged).
+async function checkRepo(prevEntry, spec) {
+  const head = await json(`https://api.github.com/repos/${spec.repo}/commits/${spec.branch}`);
+  const sha = head.sha;
+  const date = head.commit?.committer?.date;
+  const label = spec.key.padEnd(6);
+  if (!prevEntry?.sha) {
+    console.log(`${label}: ${sha.slice(0, 8)} (${date}) — baseline created`);
+    return { sha, date };
+  }
+  if (sha === prevEntry.sha) {
+    console.log(`${label}: ${sha.slice(0, 8)} (matches baseline)`);
+    return { sha, date };
+  }
+  let cmp;
+  try {
+    cmp = await json(`https://api.github.com/repos/${spec.repo}/compare/${prevEntry.sha}...${spec.branch}`);
+  } catch (e) {
+    // force-push/history rewrite or API hiccup: keep the old baseline, ask for manual review
+    notes.push(`${spec.key}: compare ${prevEntry.sha.slice(0, 8)}...${spec.branch} failed (${e.message}) — re-verify watched files, then --update`);
+    return prevEntry;
+  }
+  const files = (cmp.files ?? []).map((f) => f.filename);
+  const hits = [...new Set(files.filter((f) => spec.watch.some((w) => f === w || f.startsWith(w))))];
+  const range = `${prevEntry.sha.slice(0, 8)} -> ${sha.slice(0, 8)} (${cmp.total_commits ?? "?"} commits)`;
+  if (hits.length) {
+    failures.push(`${spec.key} ${range} touched watched surfaces:\n  ${hits.join("\n  ")}${cmp.truncated_files ? "\n  (file list truncated — treat as drift)" : ""}`);
+  } else {
+    console.log(`${label}: ${range} — none of the watched files touched${cmp.truncated_files ? " (file list truncated — verify)" : ""}`);
+  }
+  return { sha, date };
+}
+
 function checkScaffolds() {
   // Node scaffolds: syntax check.
   const mjs = [];
@@ -252,6 +362,7 @@ const next = {
   ruby: await checkSimple(baseline, "ruby", "https://rubygems.org/api/v1/gems/mixin_bot.json", (d) => d.version, "ruby mixin_bot"),
   docs: await checkSimple(baseline, "docs", "https://api.github.com/repos/MixinNetwork/developers.mixin.one/commits?path=developers-docs/docs&per_page=1", (d) => d[0]?.commit?.committer?.date, "docs content last commit"),
   computer: await checkComputer(baseline),
+  repos: Object.fromEntries(await Promise.all(REPOS.map(async (spec) => [spec.key, await checkRepo(baseline.repos?.[spec.key], spec)]))),
 };
 checkScaffolds();
 

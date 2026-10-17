@@ -46,8 +46,9 @@ Manual pass (each quarter):
 
 1. Diff the docs repo (`git log` since last check) — watch `api/sequencer/`, `api/messages/`, dashboard features.
 2. Download new SDK versions, diff exported symbols against the baseline (`check-currency.mjs` automates).
-3. Ecosystem pulse: fox-one org, `an-lee/mixin_bot`, Pando/Exin status.
-4. Update this matrix + the SKILL.md currency block in the same commit; bump `references/` claims that moved.
+3. Client repos (ios-app, android-app, flutter-app, mixin_bot_sdk_dart) are now **automated**: `check-currency.mjs` watches the exact files cited above (list in the script's `REPOS`) and reports only commits touching them. Quarterly, spot-check one watched surface per repo by hand anyway — the watch lists cover cited files, not behaviors newly added elsewhere.
+4. Ecosystem pulse: fox-one org, `an-lee/mixin_bot`, Pando/Exin status.
+5. Update this matrix + the SKILL.md currency block in the same commit; bump `references/` claims that moved.
 
 ## Known drift risks (checked next cycle)
 

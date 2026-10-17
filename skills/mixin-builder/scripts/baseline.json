@@ -564,5 +564,23 @@
     "members": 7,
     "threshold": 5,
     "operation_price": "0.001"
+  },
+  "repos": {
+    "ios-app": {
+      "sha": "8f85efbf9bee896bf4369bf40e9467a9346dda05",
+      "date": "2026-10-16T13:16:01Z"
+    },
+    "android-app": {
+      "sha": "06af6307a7faa26d84c082168a3665f22864ae4f",
+      "date": "2026-10-16T07:21:39Z"
+    },
+    "flutter-app": {
+      "sha": "904dcb79aac2aa921e8a530c70babe4d9547ee74",
+      "date": "2026-10-16T07:40:42Z"
+    },
+    "mixin_bot_sdk_dart": {
+      "sha": "96a91a028be3164ee38576a9cab5abd4bb997c62",
+      "date": "2026-10-16T05:21:52Z"
+    }
   }
 }

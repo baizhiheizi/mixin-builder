@@ -84,7 +84,7 @@ Mixin skills historically died by inventing SDK symbols. This one is built so th
 
 - **Anti-hallucination by construction** — no SDK symbol appears in the content unless it was read from the pinned SDK source (Go `bot-api-go-client/v3` v3.25.7 · Node `@mixin.dev/mixin-node-sdk` 7.6.0 · Ruby `mixin_bot` 3.0.2 · `safe` v0.28.2 · `multi-party-sig` v0.7.0 · docs repo HEAD · kernel `MixinNetwork/mixin`). Anything unverifiable is marked `[UNVERIFIED]` inline.
 - **Resolve-don't-recall** — `references/sdk-map.md` points to the exact source file per topic; agents are instructed to read the *installed* SDK before emitting code, with the documented REST call as fallback.
-- **Automated drift alarm** — `scripts/check-currency.mjs` checks latest SDK versions, diffs exported-symbol surfaces against `scripts/baseline.json`, and syntax-checks every scaffold. Nonzero exit = drift; `--update` re-baselines after review.
+- **Automated drift alarm** — `scripts/check-currency.mjs` checks latest SDK versions, diffs exported-symbol surfaces against `scripts/baseline.json`, syntax-checks every scaffold, and tracks the four first-party Mixin repos (ios-app, android-app, flutter-app, mixin_bot_sdk_dart) via the GitHub compare API — drift only when commits touch the watched files the skill cites. Nonzero exit = drift; `--update` re-baselines after review.
 - **Live probes over stale numbers** — ephemeral facts (Computer registration price, members/threshold, your registration state) are probed at use time via `scripts/probe.mjs`, never copied from prose.
 
 Full verified-against matrix and re-verify instructions: [`skills/mixin-builder/references/compatibility.md`](skills/mixin-builder/references/compatibility.md).

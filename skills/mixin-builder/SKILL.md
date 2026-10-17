@@ -83,12 +83,12 @@ Mixin skills historically died by inventing SDK symbols (~25 fabricated Go funct
 
 Verified against (full matrix + re-verify steps: `references/compatibility.md`):
 
-- Go `bot-api-go-client/v3` **v3.25.7** · Node `@mixin.dev/mixin-node-sdk` **7.6.0** · Ruby `mixin_bot` **3.0.2** · docs content last changed **2026-08-02** · `computer.mixin.one` **v0.9.1** (7 members / threshold 5, registration 0.001 XIN) — all checked **2026-10-11**.
+- Go `bot-api-go-client/v3` **v3.25.7** · Node `@mixin.dev/mixin-node-sdk` **7.6.0** · Ruby `mixin_bot` **3.0.2** · docs content last changed **2026-08-02** · `computer.mixin.one` **v0.9.1** (7 members / threshold 5, registration 0.001 XIN) · clients audited **2026-10-17** (ios-app v6.3.4, android-app master, flutter-app v6.3.1 desktop — SHAs in compatibility.md) — all checked **2026-10-11** (SDKs) / **2026-10-17** (clients).
 
 Before relying on SDK specifics (or if anything here contradicts the installed SDK), run:
 
 ```bash
-node scripts/check-currency.mjs   # latest versions + export diff + scaffold checks; nonzero exit = drift
+node scripts/check-currency.mjs   # latest versions + export diff + client-repo watch + scaffold checks; nonzero exit = drift
 node scripts/probe.mjs            # read-only live probes: me, outputs, snapshots, computer
 ```
 
