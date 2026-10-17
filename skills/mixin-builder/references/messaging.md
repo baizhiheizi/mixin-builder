@@ -24,6 +24,14 @@ Protocol-first reference for sending messages via `POST /messages`, receiving th
 
 SDKs: Go `PostMessage` / `PostMessageRequest(*MessageRequest)` / `PostMessages(batch)`; Node `client.message.sendOne/sendBatch(MessageRequest[])`; Ruby via the API modules (go: message.go; node: dist/index.d.ts 7.6.0; ruby: mixin_bot 3.0.2 README).
 
+Extra send params the official client uses over Blaze `CREATE_MESSAGE` (ios-app@master `BlazeMessageParam.swift`; REST accepts the same fields where the SDKs expose them):
+
+| Param | Type | Meaning |
+|---|---|---|
+| `mentions` | array of user uuids | mention pings — iOS derives them from `@identity_number` occurrences in group text |
+| `silent` | bool | deliver without a push notification |
+| `expire_in` | int64 seconds | per-message TTL (disappearing message); conversation-level default via `PATCH /conversations/:id` `{"duration": seconds}` (iOS `updateExpireIn`, Node `conversation.disappearDuration`) |
+
 ## 1. Categories
 
 Bots can **send** only `PLAIN_*`, `APP_CARD`, `APP_BUTTON_GROUP`, and `MESSAGE_RECALL`. `SYSTEM_*` categories are inbound-only (arrive via Blaze). `MESSAGE_PIN` and `SYSTEM_ACCOUNT_SNAPSHOT` are user-client/System categories — bots receive them, never emit them (docs: api/messages/category.md; node MessageCategory union).
@@ -40,16 +48,31 @@ Bots can **send** only `PLAIN_*`, `APP_CARD`, `APP_BUTTON_GROUP`, and `MESSAGE_R
 | `PLAIN_LIVE` | JSON `{width, height, thumb_url, url}` (url = HLS m3u8) | bot ↔ user |
 | `PLAIN_LOCATION` | JSON `{longitude, latitude, name, address}` | bot ↔ user |
 | `PLAIN_CONTACT` | JSON `{"user_id": "UUID"}` | bot ↔ user |
+| `PLAIN_TRANSCRIPT` | JSON — bundle of quoted messages (user-client "forward/combine" feature; iOS renders it) | user clients, bot receives |
+| `PLAIN_JSON` | client-internal control channel (device transfer, batch acks) — never emit | internal |
 | `APP_CARD` | JSON, see next section | bot → user |
 | `APP_BUTTON_GROUP` | JSON array, see next section | bot → user |
 | `MESSAGE_RECALL` | JSON `{"message_id": "<recalled message UUID>"}` (go: blaze.go `SendRecallMessage` v3.25.7) | bot → user |
-| `SYSTEM_CONVERSATION` | group membership/role changes | inbound only |
+| `SYSTEM_CONVERSATION` | group lifecycle JSON `{action, participant_id, user_id?, role?, expire_in?}`; actions CREATE/UPDATE/ADD/REMOVE/JOIN/EXIT/ROLE/EXPIRE (ios-app@master) | inbound only |
 | `SYSTEM_ACCOUNT_SNAPSHOT` | legacy transfer notification JSON (type, snapshot_id, opponent_id, asset_id, amount, trace_id, memo) | inbound only |
 | `SYSTEM_SAFE_SNAPSHOT` | Safe snapshot notification (also delivered via Blaze onTransfer) | inbound only |
 | `SYSTEM_SAFE_INSCRIPTION` | inscription events | inbound only |
+| `SYSTEM_USER` / `SYSTEM_CIRCLE` / `SYSTEM_SESSION` | user/circle/session lifecycle events (user clients emit/consume; bots may observe) | inbound only |
 | `MESSAGE_PIN` | JSON `{action: "PIN"\|"UNPIN", message_ids: [...]}` | user clients |
 
-(docs: api/messages/category.md + src responses.js; node: dist/index.d.ts 7.6.0 MessageCategory)
+Also in the wild (ios-app@master MessageCategory): `SIGNAL_*` (user↔user Signal-encrypted twins of PLAIN_*), `WEBRTC_AUDIO_*` + `WEBRTC_ICE_CANDIDATE` (1:1 calls), `KRAKEN_*` (group calls), `ENCRYPTED_*` (§5). Ignore unknown categories forward-compatibly.
+
+(docs: api/messages/category.md + src responses.js; node: dist/index.d.ts 7.6.0 MessageCategory; ios-app@master Message.swift)
+
+### App capabilities change what arrives (ios-app@master, verified 2026-10-17)
+
+The app object carries a `capabilities` array (⚠️ the API JSON key is **misspelled `capabilites`** — iOS decodes both `CodingKeys.capabilities = "capabilites"` and its SQL column uses the typo):
+
+| Capability | Effect |
+|---|---|
+| `ENCRYPTED` | iOS sends user→bot messages as **`ENCRYPTED_*`** instead of `PLAIN_*` (SendMessageService+Sending.swift). A bot opted into ENCRYPTED **must** implement session decryption (§5) or it receives ciphertext only. Groups: only `_TEXT` is upgraded, and only for the addressed bot (below). |
+| `GROUP` | makes the app a group bot: iOS routes group text messages prefixed `@700xxxx ` (the bot's identity number + space) directly to that bot via `recipient_id`; other group traffic stays SIGNAL_* among users (SendMessageService.swift `groupMessageRecipientAppId`). |
+| `IMMERSIVE` | webview runs immersive (→ webview.md). |
 
 ### Attachments (images/files/video/audio)
 
@@ -63,45 +86,65 @@ SDKs: Go `CreateAttachment`/`AttachmentShow` (go: attachment.go); Node `client.a
 
 ## 2. APP_CARD anatomy
 
+iOS decodes the card as **two generations** (ios-app@master `AppCardData.swift`): if a non-empty legacy `action` string is present the whole card parses as **V0** (legacy); otherwise as **V1** (new style). So `action` doesn't just "take precedence" — it selects the model; never mix generations.
+
+V0 (legacy) — exactly what Go's helper builds:
+
 ```json
 {
-  "app_id": "7404c815-0393-4ea3-b9f2-b08efe4c72da",
+  "app_id": "7404c815-0393-4ea3-b08efe4c72da",
   "icon_url": "https://…/logo.png",
-  "cover_url": "https://…/cover.png",
   "title": "Mixin",
   "description": "Hello World.",
   "action": "https://mixin.one",
-  "actions": [
-    { "label": "Mixin Website", "color": "#ABABAB", "action": "https://mixin.one" }
-  ],
-  "shareable": true
+  "shareable": true,
+  "updated_at": "2026-10-17T00:00:00Z"
 }
 ```
 
-| Field | Constraint | Notes |
-|---|---|---|
-| `app_id` | UUID | app shown as sender identity |
-| `title` | 1 ≤ len ≤ 36 | |
-| `description` | 1 ≤ len ≤ 1024 | |
-| `cover_url` | image URL, 16:10 aspect | new style only; Messenger ≥ 1.9.0 |
-| `actions[]` | 1–6 entries | `{label, color, action}`; new style; Messenger ≥ 1.9.0 |
-| `action` | URL string | **legacy** single action |
-| `shareable` | bool, default `true` | disable forwarding; Messenger ≥ 0.31.0 |
-| `icon_url` | URL | deprecated |
+V1 (new style, no `action` key):
 
-⚠️ **If `action` is present the client uses the old card style and ignores `cover_url`/`actions` entirely** — never mix legacy `action` with new-style fields (docs: api/messages/category.md tip).
+```json
+{
+  "app_id": "7404c815-0393-4ea3-b9f2-b08efe4c72da",
+  "cover_url": "https://…/cover.png",
+  "cover": {"url": "https://…/cover.png", "mime_type": "image/png", "width": 1280, "height": 800, "thumbnail": "<blurhash>"},
+  "title": "Mixin",
+  "description": "Hello World.",
+  "actions": [
+    { "label": "Mixin Website", "color": "#ABABAB", "action": "https://mixin.one" }
+  ],
+  "shareable": true,
+  "updated_at": "2026-10-17T00:00:00Z"
+}
+```
+
+| Field | Generation | Constraint | Notes |
+|---|---|---|---|
+| `app_id` | both | uuid | required in V1 (iOS `decode`, not optional); sender identity |
+| `title` | V0 required / V1 optional | V0: 1 ≤ len ≤ 36 | V1 falls back to `description` in digests |
+| `description` | V0 required / V1 optional | 1 ≤ len ≤ 1024 | iOS link-detects identity numbers inside it |
+| `cover_url` | V1 | image URL, 16:10 aspect | plain-string cover |
+| `cover` | V1 | object `{url, mime_type, width, height, thumbnail}` | richer than `cover_url`: `thumbnail` is a **blurhash** string rendered instantly; ratio computed from width/height. iOS prefers `cover` when present with a usable `url` |
+| `actions[]` | V1 | 0–6 entries | `{label, color, action}`; omitted → no buttons (iOS decodes to `[]`) |
+| `action` | V0 only | URL string | **legacy** — its presence forces V0 parsing; ignored in V1 |
+| `shareable` | V1 **required** / V0 optional | bool | ⚠️ iOS V1 decode **fails without the key** (renders nothing) — always send it. Forwarding also requires every action to be `mixin`/`http`/`https` (no `input:` actions) |
+| `icon_url` | V0 required | URL | legacy thumbnail |
+| `updated_at` | both | ISO timestamp | client-side cache hint |
 
 ### Action schemas
 
+Tap routing (ios-app@master `ConversationViewController`): every action first goes through the deep-link router (→ schemas.md) — `mixin://…` opens in-app (profile, pay sheet, send, …); `http(s)://` opens the webview; anything else is "external" (also: `https` with host ≠ `mixin.one` counts as external).
+
 | `action` value | Behavior |
 |---|---|
-| `https://…` | Opens webview; domain **must be whitelisted in the dashboard** for the app `[UNVERIFIED — dashboard setting, not in docs repo]` |
+| `https://…` | Opens webview; domain **must be whitelisted in the dashboard** (Resource Patterns) — iOS re-checks `app.resourcePatterns` against the URL before opening, including for signature requests `[VERIFIED ios-app@master]` |
 | `mixin://users/:user_id` | Open a user profile (docs: schema.md) |
 | `mixin://conversations/:conversation_id?user=user_id` | Jump to a conversation (docs: schema.md) |
 | `mixin://pay?recipient=&asset=&amount=&memo=&trace=` | Open payment sheet (docs: schema.md) |
 | `mixin://send?category=CATEGORY&conversation=CONV_ID&data=DATA` | Pre-fill a message draft (docs: schema.md) |
-| `input:<text>` | Button tap auto-sends `<text>` to the bot as a PLAIN_TEXT message (docs: app/design/user-interaction.md) |
-| `input:share` | `[UNVERIFIED — share-sheet trigger claimed by old skill sets; not in docs repo or SDK sources]` |
+| `input:<text>` | Button tap auto-sends `<text>` to the bot as a text message (docs: app/design/user-interaction.md; verified `openInputAction` ios-app@master — sent as the user's message, encrypted per conversation policy) |
+| `input:share` | ❌ **does not exist** — no handler anywhere in ios-app@master (2026-10-17); do not use |
 
 Go helper `BlazeClient.SendAppCard(convId, recipientId, title, description, action, iconUrl)` builds the **legacy** shape (no cover/actions/shareable) — for new-style cards marshal the JSON yourself and use `PostMessageRequest` (go: blaze.go v3.25.7). Node: `client.message.sendAppCard(userID, payload)`.
 
@@ -166,3 +209,4 @@ Each per-session key block = `session_id || AESCBC(message_key, shared_secret, i
 - go: bot-api-go-client v3.25.7 — blaze.go, message.go, conversation.go, utils.go, uuid.go, session.go, user.go, attachment.go
 - node: @mixin.dev/mixin-node-sdk 7.6.0 dist/index.d.ts, dist/blaze/index.d.ts
 - ruby: mixin_bot 3.0.2 README
+- iOS client: MixinNetwork/ios-app master @ 2026-10-17 (v6.3.4) — Message.swift (categories), AppCardData.swift (V0/V1), AppButtonData.swift, ConversationViewController.swift (input actions, card tap routing), SendMessageService+Sending.swift + SendMessageService.swift (capabilities, @700 addressing, send params), BlazeMessageParam.swift, SystemConversationMessagePayload.swift

@@ -29,14 +29,16 @@ Actions:
 | `CREATE_MESSAGE` | server→client | Inbound message; `data` is a `MessageView` |
 | `ACKNOWLEDGE_MESSAGE_RECEIPT` | both | Params `{message_id, status}` (Go uses `"READ"`). Server→client copies carry `data` = MessageView with `source: "ACKNOWLEDGE_MESSAGE_RECEIPT"` (read receipts for messages you sent) |
 
+REST fallbacks the official client uses alongside Blaze (ios-app@master MessageAPI.swift): `POST /acknowledgements` (batch `[{"message_id","status"}]` — Go `PostAcknowledgements`), `POST /messages/acknowledge`, and **`GET /messages/status/:offset`** — a pull-based catch-up that returns messages past a cursor, the client's recovery path when Blaze delivery is in doubt. Useful as a bot-side reconciliation loop keyed on the same offset discipline as snapshot polling (→ reconciliation.md).
+
 MessageView fields (Go): `conversation_id, user_id, message_id, category, data_base64, representative_id, quote_message_id, status, source, created_at, updated_at` (go: blaze.go `MessageView`). `data_base64` is base64 of the category payload (UTF-8 text for PLAIN_TEXT, JSON for APP_CARD, …).
 
 ## What arrives
 
 Categories (Node `MessageCategory` union + Go constants; docs: api/messages/category.md):
 
-- **PLAIN_***: TEXT, POST, IMAGE, DATA, VIDEO, AUDIO, STICKER, LIVE, LOCATION, CONTACT — user-typed content.
-- **APP_CARD / APP_BUTTON_GROUP**: interactive cards/buttons the user tapped; `data_base64` decodes to the card JSON (Go `AppCardView`: app_id, cover_url, title ≤36, description, actions[] ≤6, shareable).
+- **PLAIN_***: TEXT, POST, IMAGE, DATA, VIDEO, AUDIO, STICKER, LIVE, LOCATION, CONTACT — user-typed content. ⚠️ A bot app with the `ENCRYPTED` capability receives the **`ENCRYPTED_*`** twins of these instead of PLAIN_* (→ messaging.md "App capabilities"); a `GROUP`-capable bot in a group chat receives text messages addressed `@700xxxx <text>` (its identity number) directly via `recipient_id`, with `data` cleared on the wire (ios-app@master).
+- **APP_CARD / APP_BUTTON_GROUP**: interactive cards/buttons the user tapped; `data_base64` decodes to the card JSON (Go `AppCardView`: app_id, cover_url, title ≤36, description, actions[] ≤6, shareable; full V0/V1 model → messaging.md).
 - **MESSAGE_RECALL**: user deleted a message; `data_base64` = recalled `message_id`.
 - **SYSTEM_CONVERSATION**: conversation lifecycle (participant add/remove/role); payload `{action, participant_id, user_id?, role?}` (go: `SystemConversationPayload`).
 - **SYSTEM_ACCOUNT_SNAPSHOT**: **LEGACY transfers only** (`TransferView`: snapshot_id, counter_user_id, asset_id, amount, trace_id, memo).

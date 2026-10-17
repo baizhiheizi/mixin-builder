@@ -119,3 +119,15 @@ Ordered by how often they bite (16–19 added 2026-10-12/13, not yet ranked). Ea
 **Symptom:** every signed request from your own `fetch` code returns HTTP 202 `{"code":10006,"description":"Update required."}`, while SDK REST calls with the same keystore work. Or a Node bot using the SDK's `BlazeKeystoreClient` never receives a single message and logs nothing (the WebSocket handshake gets the same 202 and the SDK waits forever). Easy to misread as a broken keystore or a dashboard setting.
 **Cause:** api.mixin.one and blaze.mixin.one check `User-Agent`. Missing, `node` (Node's `fetch` default) and `x` are rejected; `name/version` strings such as `my-bot/1.0`, `Go-http-client/1.1`, `axios/1.7.9` pass. Node's `ws` library (used by the SDK's Blaze client) sends none. Live-checked 2026-10-13 with the same JWT.
 **Fix:** set an explicit `User-Agent` such as `my-bot/1.0` on every HTTP request and WebSocket handshake. Go (`Bot-API-Go-Client` for REST, Go's default for Blaze) and Ruby (`mixin_bot/<version>`) already do. For Node Blaze use `assets/scaffold-bot-echo/node/blaze-client.mjs`. `common-errors.md` 10006.
+
+## 20. Bot suddenly receives only ciphertext — `ENCRYPTED` capability
+
+**Symptom:** a bot that worked on `PLAIN_*` starts receiving `ENCRYPTED_TEXT`/`ENCRYPTED_IMAGE`…; `data_base64` no longer decodes to readable payloads.
+**Cause:** the app dashboard was granted the `ENCRYPTED` capability — Messenger then sends user→bot messages as `ENCRYPTED_*` (session-encrypted) instead of `PLAIN_*` (verified ios-app@master `SendMessageService+Sending.swift`). The capability is opted into per app, often without realizing the inbox contract changes with it.
+**Fix:** either implement the encrypted-message pipeline (messaging.md §5: `POST /sessions/fetch`, ECDH per-session keys, AES-CBC body) or have the capability removed. Same family: `GROUP` capability routes group `@700xxxx ` text to the bot directly. Check `capabilities` on the app object — note the API JSON key is misspelled **`capabilites`**.
+
+## 21. APP_CARD silently renders nothing — missing `shareable` in new-style cards
+
+**Symptom:** a new-style card (no legacy `action`) sends fine but the recipient's iOS client shows no card at all.
+**Cause:** iOS decodes V1 cards with `shareable` as a **required** key (`AppCardData.V1Content.init(from:)`, ios-app@master) — omit it and the whole payload fails to decode. Docs describe it as optional-with-default, which iOS does not honor.
+**Fix:** always include `"shareable": true|false` in V1 cards (and remember forwarding additionally requires every action to be a `mixin`/`http`/`https` URL — `input:` actions make the card unforwardable). Legacy `action`-style cards don't need it.

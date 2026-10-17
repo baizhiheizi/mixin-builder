@@ -268,6 +268,12 @@ SDK: Go `CreateSafeMultisigRequest(ctx, []*KernelTransactionRequestCreateRequest
 
 **Verify it worked (multisig):** poll `GET /safe/multisigs/:id` until `signers` reaches the threshold and the state finalizes, then `GET /safe/transactions/:id` (by the request's tx hash) for `state == "spent"` + snapshot. After an unlock, assert the request shows released before reusing its pinned UTXOs.
 
+## Route API — the client's trading/service family (verified ios-app@master, 2026-10-17)
+
+The Messenger client talks to a parallel service family with its **own auth scheme**, distinct from the bot JWT: hosts `api.route.mixin.one`, `api.reward.mixin.one`, `api.cash.mixin.one`, `api.earn.mixin.one`. It powers the built-in swap/limit/perps UI (`mixin://mixin.one/swap` → schemas.md §1b), web3 wallets, gasless txs, market data, and the buy ramp. Surface (paths are prefixed per host): `/web3/tokens`, `/web3/quote`, `/web3/swap`, `/limit_orders`, `/perps/markets|orders|positions`, `/markets`, `/prices/alerts`, `/wallets`, `/web3/estimate-fee`, `/web3/rpc?chain_id=`, `/web3/gasless/{fees,prepare,submit}`, `/ramp/weburl`.
+
+Auth (RouteAPI.swift `sign`): fetch the counterparty bot's session public key (`POST /sessions/fetch`), ECDH with your session private key (X25519), then `HMAC-SHA256(shared, timestamp + METHOD + path + body)`; send headers **`MR-ACCESS-TIMESTAMP`** (unix seconds) and **`MR-ACCESS-SIGN`** = base64url(`user_id || mac`). This is the same scheme the webview `signBotSignature` bridge exposes to verified apps. For products: the fox-one `4swap-sdk-go` family targets this surface; treat it as a first-party, versioned API — re-verify paths before relying on them (not in the public docs repo).
+
 ## Withdrawals
 
 Moving funds on-chain. The **destination output is built first** with **no ghost key**: `type 161` (`OutputTypeWithdrawalSubmit` = `0xa1`), `withdrawal: {address: destination, tag}`. Fees go to the cashier `674d6776-d600-4346-af46-58e77d8df185` (Go `MixinFeeUserId`, Node `MixinCashier`).

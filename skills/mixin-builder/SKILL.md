@@ -56,6 +56,8 @@ Each rail exists because skipping it loses money or floods the network. Expanded
 | "Which asset_id is USDT / on which chain?", dust minimums, memo-required chains | `concepts.md` § Asset model | — |
 | "What's my bot's balance / is it registered?" | `payments.md` § UTXO model | `scripts/probe.mjs me`, `outputs`, `snapshots` |
 | Send transfers, multisig, withdrawals (fees!), inscriptions | `payments.md` | — |
+| Trading/swap/perps inside Messenger (Route API, MR-ACCESS auth) | `payments.md` § Route API | — |
+| Bot inbox oddities: ciphertext arrivals, group addressing, card not rendering | `gotchas.md` #20–#21, `messaging.md` § capabilities | — |
 | "why is my balance wrong" / UTXO dust / consolidation | `payments.md` § Dust & consolidation, `gotchas.md` | `scripts/probe.mjs outputs` |
 | Mixin login for a web app (OAuth, PKCE, scopes) | `identity-and-keys.md` | `assets/scaffold-oauth-web/` |
 | Keystore anatomy/formats, keys, TIP PIN, Sequencer registration, sub-accounts, 401 on first call | `identity-and-keys.md` | `scripts/probe.mjs me` |

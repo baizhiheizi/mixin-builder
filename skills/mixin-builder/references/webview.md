@@ -22,9 +22,12 @@ Import from `@mixin.dev/mixin-node-sdk` (7.6.0):
 | `reloadTheme()` | — | Re-extract `theme-color` after you change it dynamically |
 | `playlist(urls)` | — | Play audio playlist natively |
 | `close()` | — | Close webview → back to chat |
-| `getAssets([asset_ids], cb)` | `cb(WebviewAsset[])` | User balances for given assets |
-| `getTipAddress(chainId, cb)` | `cb(address)` | User's TIP address on a chain |
-| `tipSign(chainId, msg, cb)` | `cb(signature)` | User TIP-signs a message on a chain |
+| `getAssets([asset_ids], cb)` | `cb(WebviewAsset[])` | User balances for given assets — gated, see below |
+| `getTipAddress(chainId, cb)` | `cb(address)` | ⚠️ **iOS (v6.3.4) always rejects with an empty string** — treat as unavailable |
+| `tipSign(chainId, msg, cb)` | `cb(signature)` | ⚠️ **iOS (v6.3.4) always rejects with an empty signature** — treat as unavailable |
+| `openInBrowser(url)` | — | Open an http(s) URL in an in-app Safari sheet (iOS-only bridge; ios-app@master) |
+
+iOS also registers two advanced bridges (ios-app@master `WebViewMessageHandler`): `_mw_` (a web3 wallet bridge for dapps, main-frame http/https origins only) and `signBotSignature` — request-signing against the Route API family (see payments.md "Route API") for the **verified app itself** (appID must equal the webview's app and the URL must match the app's Resource Patterns). Third-party pages normally use neither; know they exist when auditing webview behavior.
 
 ```ts
 interface Context {
@@ -43,7 +46,7 @@ interface WebviewAsset { asset_id, balance, chain_id, icon_url, name, symbol: st
 
 ### Bridge plumbing (why the wrapper exists)
 
-- **iOS (WebKit)**: native handlers at `window.webkit.messageHandlers.{MixinContext,reloadTheme,playlist,close,getAssets,getTipAddress,tipSign}`; `getMixinContext` is implemented via `prompt('MixinContext.getContext()')` returning a JSON string, and defaults `platform` to `'iOS'`.
+- **iOS (WebKit)**: native handlers at `window.webkit.messageHandlers.{MixinContext,reloadTheme,playlist,close,getAssets,getTipAddress,tipSign,openInBrowser,signBotSignature,_mw_}`; `getMixinContext` is implemented via `prompt('MixinContext.getContext()')` returning a JSON string, and defaults `platform` to `'iOS'`. Verified against ios-app@master: the context payload is exactly `{app_version, immersive, appearance, currency, locale, platform, conversation_id}`. The webview UA carries `Mixin/<app-version>` (`applicationNameForUserAgent`).
 - **Android/Desktop**: direct `window.MixinContext.getContext()` (JSON string) / `.reloadTheme()` / `.playlist(audios)` / `.close()` / `.getAssets(ids, globalCallbackName)` …; `platform` defaults to `'Android'`.
 - Callback methods register a throwaway global (`mixinAssetsCallback_<ts>_<rand>` for getAssets; fixed `tipAddressCallbackFunction` / `tipSignCallbackFunction` for TIP) that the native side invokes with a JSON string; the wrapper parses and deletes it.
 - **Outside Messenger** (plain browser) both bridges are absent: `getMixinContext()` returns `{}` and `platform` is `undefined` — guard every call, e.g. `const ctx = WebViewApi().getMixinContext(); if (!ctx.platform) /* web fallback */`.
@@ -73,8 +76,8 @@ Keep using the SDK wrapper rather than poking `window.webkit` yourself — it al
 `getMixinContext()` is **context, not authentication**: `conversation_id` identifies the chat and `platform` the client, but any page can read it. Escalate per need:
 
 - **Full identity**: run the OAuth flow from inside the webview (→ identity-and-keys.md) — authorize URL with your `client_id`/`scope`, PKCE exchange; store per-user server-side.
-- **Balance proofs**: `getAssets(ids, cb)` returns the user's balances for chosen assets — use to pre-select payment asset.
-- **Action proofs**: `getTipAddress` / `tipSign` produce chain-scoped TIP addresses/signatures the user cannot forge without their TIP key; verify server-side (TIP body rules → identity-and-keys.md).
+- **Balance proofs**: `getAssets(ids, cb)` returns the user's balances for chosen assets — but iOS gates it (verified from `MixinWebViewController.reportAssetsIfVerified`, ios-app@master): (1) every id must be a lowercased uuid; (2) the **current page's host must equal the app's Home URL host** — calling it from another whitelisted page fails with `[]`; (3) the app must be **verified** or the user must have granted it `ASSETS:READ` via OAuth (`GET /authorizations?app=` is consulted live). Use to pre-select payment asset.
+- **Action proofs**: `getTipAddress` / `tipSign` produce chain-scoped TIP addresses/signatures — ⚠️ iOS v6.3.4 **always rejects both with empty strings** (verified `WebViewMessageHandler`); Android/Desktop may still honor them, but do not build a product path on them today. Prefer OAuth + server-side TIP flows instead.
 
 ## Verify it worked
 
@@ -86,6 +89,7 @@ Keep using the SDK wrapper rather than poking `window.webkit` yourself — it al
 ## Sources
 
 - node: `@mixin.dev/mixin-node-sdk` 7.6.0 — `dist/index.d.ts` (WebViewApi, Context, WebviewAsset, window bridges), `dist/index.js` (WebViewApi implementation, prompt/callback plumbing)
+- iOS client: MixinNetwork/ios-app master @ 2026-10-17 (v6.3.4) — `WebViewMessageHandler.swift` (bridge inventory, TIP rejection, signBotSignature), `MixinWebViewController.swift` (getAssets gating, prompt plumbing), `MixinWebContext.swift` (context payload, IMMERSIVE, UA)
 - docs: app/getting-started/create-app.md (Home URL, Resource Patterns, Immersive)
 - docs: app/design/{overview,title-bar,dark-mode,immersive-mode,floating-menu,color,sticker,user-interaction}.md (HEAD 2026-10-05)
 - go: bot-api-go-client v3.25.7 blaze.go `SendAppCard`; APP_CARD payload limits → messaging.md
