@@ -66,13 +66,16 @@ Also in the wild (ios-app@master MessageCategory): `SIGNAL_*` (user↔user Signa
 
 ### App capabilities change what arrives (ios-app@master, verified 2026-10-17)
 
-The app object carries a `capabilities` array (⚠️ the API JSON key is **misspelled `capabilites`** — iOS decodes both `CodingKeys.capabilities = "capabilites"` and its SQL column uses the typo):
+The app object carries a `capabilities` array. ⚠️ **The wire-format JSON key is misspelled `capabilites`** — confirmed by iOS (`CodingKeys.capabilities = "capabilites"`), the official Dart SDK (`mixin_bot_sdk_dart` `App.capabilites`), and Android's legacy DB column; modern Android's own VO expects `capabilities`, so **parse both spellings** when reading app objects over raw REST:
 
 | Capability | Effect |
 |---|---|
-| `ENCRYPTED` | iOS sends user→bot messages as **`ENCRYPTED_*`** instead of `PLAIN_*` (SendMessageService+Sending.swift). A bot opted into ENCRYPTED **must** implement session decryption (§5) or it receives ciphertext only. Groups: only `_TEXT` is upgraded, and only for the addressed bot (below). |
-| `GROUP` | makes the app a group bot: iOS routes group text messages prefixed `@700xxxx ` (the bot's identity number + space) directly to that bot via `recipient_id`; other group traffic stays SIGNAL_* among users (SendMessageService.swift `groupMessageRecipientAppId`). |
+| `ENCRYPTED` | iOS and Android send user→bot messages as **`ENCRYPTED_*`** instead of `PLAIN_*`; the Flutter desktop client does the same (`EncryptCategory.kt`, `SendMessageService+Sending.swift`, `conversation_provider.dart`). A bot opted into ENCRYPTED **must** implement session decryption (§5) or it receives ciphertext only. Groups: only `_TEXT` is upgraded, and only for the addressed bot (below). |
+| `GROUP` | makes the app a group bot: clients route group text messages prefixed `@700xxxx ` (the bot's identity number + space) directly to that bot via `recipient_id`; other group traffic stays SIGNAL_* among users (ios-app `SendMessageService.swift`, android-app `ConversationViewModel.kt`). |
 | `IMMERSIVE` | webview runs immersive (→ webview.md). |
+| `CONTACT` | declared in Android's `AppCap` enum; no usage found in any client — ignore. |
+
+Group size cap: **1024 participants** (flutter-app `kMaxGroupParticipants`; server error 20116 "group full" beyond it).
 
 ### Attachments (images/files/video/audio)
 
@@ -128,9 +131,11 @@ V1 (new style, no `action` key):
 | `cover` | V1 | object `{url, mime_type, width, height, thumbnail}` | richer than `cover_url`: `thumbnail` is a **blurhash** string rendered instantly; ratio computed from width/height. iOS prefers `cover` when present with a usable `url` |
 | `actions[]` | V1 | 0–6 entries | `{label, color, action}`; omitted → no buttons (iOS decodes to `[]`) |
 | `action` | V0 only | URL string | **legacy** — its presence forces V0 parsing; ignored in V1 |
-| `shareable` | V1 **required** / V0 optional | bool | ⚠️ iOS V1 decode **fails without the key** (renders nothing) — always send it. Forwarding also requires every action to be `mixin`/`http`/`https` (no `input:` actions) |
+| `shareable` | V1 **required** / V0 optional | bool | ⚠️ iOS V1 decode **fails without the key** (renders nothing) — always send it. Android/Desktop tolerate absence (default true). Forwarding rules differ per client: iOS requires every action to be `mixin`/`http`/`https` (no `input:`); Desktop requires no `*://mixin.one/send` action |
 | `icon_url` | V0 required | URL | legacy thumbnail |
 | `updated_at` | both | ISO timestamp | client-side cache hint |
+
+Desktop (flutter-app) decodes one flat model with defaults — `action` empty → new-style, `shareable` defaults true, `cover.thumbnail` optional — so the strict rules above are the **safe cross-platform envelope** (send every field iOS requires).
 
 ### Action schemas
 
@@ -210,3 +215,5 @@ Each per-session key block = `session_id || AESCBC(message_key, shared_secret, i
 - node: @mixin.dev/mixin-node-sdk 7.6.0 dist/index.d.ts, dist/blaze/index.d.ts
 - ruby: mixin_bot 3.0.2 README
 - iOS client: MixinNetwork/ios-app master @ 2026-10-17 (v6.3.4) — Message.swift (categories), AppCardData.swift (V0/V1), AppButtonData.swift, ConversationViewController.swift (input actions, card tap routing), SendMessageService+Sending.swift + SendMessageService.swift (capabilities, @700 addressing, send params), BlazeMessageParam.swift, SystemConversationMessagePayload.swift
+- Android client: MixinNetwork/android-app master @ 2026-10-17 — App.kt + AppCap (capabilities), EncryptCategory.kt (ENCRYPTED routing), BlazeMessageParam.kt, ConversationViewModel.kt (GROUP routing)
+- Desktop client: MixinNetwork/flutter-app main @ 2026-10-16 (v6.3.1) — action_card_data.dart (flat card model, defaults), conversation_provider.dart (ENCRYPTED routing), constants.dart (kMaxGroupParticipants)

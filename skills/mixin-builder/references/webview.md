@@ -16,18 +16,22 @@ The chat the user came from is observable inside the page: `getMixinContext().co
 
 Import from `@mixin.dev/mixin-node-sdk` (7.6.0):
 
-| Call | Returns / callback | Purpose |
-|---|---|---|
-| `getMixinContext()` | `Context` (below) | Client + chat context |
-| `reloadTheme()` | — | Re-extract `theme-color` after you change it dynamically |
-| `playlist(urls)` | — | Play audio playlist natively |
-| `close()` | — | Close webview → back to chat |
-| `getAssets([asset_ids], cb)` | `cb(WebviewAsset[])` | User balances for given assets — gated, see below |
-| `getTipAddress(chainId, cb)` | `cb(address)` | ⚠️ **iOS (v6.3.4) always rejects with an empty string** — treat as unavailable |
-| `tipSign(chainId, msg, cb)` | `cb(signature)` | ⚠️ **iOS (v6.3.4) always rejects with an empty signature** — treat as unavailable |
-| `openInBrowser(url)` | — | Open an http(s) URL in an in-app Safari sheet (iOS-only bridge; ios-app@master) |
+| Call | iOS | Android | Desktop | Purpose |
+|---|---|---|---|---|
+| `getMixinContext()` | ✅ | ✅ | ✅ | Client + chat context |
+| `reloadTheme()` | ✅ | ✅ | ❌ | Re-extract `theme-color` after dynamic change |
+| `playlist(urls)` | ✅ | ✅ | ❌ | Play audio playlist natively |
+| `close()` | ✅ | ✅ | ❌ | Close webview → back to chat |
+| `getAssets([asset_ids], cb)` | ✅ gated | ✅ gated (empty list ⇒ full token list) | ❌ | User balances — gating below |
+| `getTipAddress(chainId, cb)` | ❌ **rejects, empty string** | ✅ TIP sheet, derives chain address | ❌ absent | Chain-scoped address proof |
+| `tipSign(chainId, msg, cb)` | ❌ **rejects, empty signature** | ✅ TIP sheet, secp256k1 hex signature | ❌ absent | User TIP-signs a message |
+| `openInBrowser(url)` | ✅ | ✅ | ❌ | Open an http(s) URL in an in-app browser sheet |
+| `showToast(text)` | ❌ | ✅ | ❌ | Android-only native toast |
+| `verifyPin(cb)` | ❌ | ✅ | ❌ | Android-only PIN prompt bridge |
 
-iOS also registers two advanced bridges (ios-app@master `WebViewMessageHandler`): `_mw_` (a web3 wallet bridge for dapps, main-frame http/https origins only) and `signBotSignature` — request-signing against the Route API family (see payments.md "Route API") for the **verified app itself** (appID must equal the webview's app and the URL must match the app's Resource Patterns). Third-party pages normally use neither; know they exist when auditing webview behavior.
+Verified per client: ios-app@master `WebViewMessageHandler` (TIP calls hard-coded to return empty), android-app@master `WebFragment.kt` `WebAppInterface`, flutter-app v6.3.1 `web_view_desktop.dart` (injects **only** `window.MixinContext.getContext()` — every other bridge simply does not exist on Desktop; treat any non-iOS/Android platform as context-only).
+
+iOS also registers two advanced bridges: `_mw_` (web3 wallet bridge, main-frame http/https origins only) and `signBotSignature` — Route-API request-signing for the **verified app itself** (appID must equal the webview's app; URL must match Resource Patterns). Android exposes `signBotSignature` too (also verified-bots-only). Third-party pages normally use neither; know they exist when auditing webview behavior.
 
 ```ts
 interface Context {
@@ -47,7 +51,8 @@ interface WebviewAsset { asset_id, balance, chain_id, icon_url, name, symbol: st
 ### Bridge plumbing (why the wrapper exists)
 
 - **iOS (WebKit)**: native handlers at `window.webkit.messageHandlers.{MixinContext,reloadTheme,playlist,close,getAssets,getTipAddress,tipSign,openInBrowser,signBotSignature,_mw_}`; `getMixinContext` is implemented via `prompt('MixinContext.getContext()')` returning a JSON string, and defaults `platform` to `'iOS'`. Verified against ios-app@master: the context payload is exactly `{app_version, immersive, appearance, currency, locale, platform, conversation_id}`. The webview UA carries `Mixin/<app-version>` (`applicationNameForUserAgent`).
-- **Android/Desktop**: direct `window.MixinContext.getContext()` (JSON string) / `.reloadTheme()` / `.playlist(audios)` / `.close()` / `.getAssets(ids, globalCallbackName)` …; `platform` defaults to `'Android'`.
+- **Android**: everything hangs off `window.MixinContext` as a JS interface object: `.getContext()`, `.reloadTheme()`, `.playlist(audios)`, `.close()`, `.getAssets(ids, globalCallbackName)`, `.getTipAddress`, `.tipSign`, `.openInBrowser`, `.showToast`, `.verifyPin`, `.signBotSignature` — `platform` defaults to `'Android'`.
+- **Desktop (Flutter)**: injects **`window.MixinContext.getContext()` only** (returns the JSON string) — no other bridge exists; `platform` reports `'Desktop'`, `immersive` is always `false`, UA carries `Mixin/<version>`.
 - Callback methods register a throwaway global (`mixinAssetsCallback_<ts>_<rand>` for getAssets; fixed `tipAddressCallbackFunction` / `tipSignCallbackFunction` for TIP) that the native side invokes with a JSON string; the wrapper parses and deletes it.
 - **Outside Messenger** (plain browser) both bridges are absent: `getMixinContext()` returns `{}` and `platform` is `undefined` — guard every call, e.g. `const ctx = WebViewApi().getMixinContext(); if (!ctx.platform) /* web fallback */`.
 
@@ -76,8 +81,8 @@ Keep using the SDK wrapper rather than poking `window.webkit` yourself — it al
 `getMixinContext()` is **context, not authentication**: `conversation_id` identifies the chat and `platform` the client, but any page can read it. Escalate per need:
 
 - **Full identity**: run the OAuth flow from inside the webview (→ identity-and-keys.md) — authorize URL with your `client_id`/`scope`, PKCE exchange; store per-user server-side.
-- **Balance proofs**: `getAssets(ids, cb)` returns the user's balances for chosen assets — but iOS gates it (verified from `MixinWebViewController.reportAssetsIfVerified`, ios-app@master): (1) every id must be a lowercased uuid; (2) the **current page's host must equal the app's Home URL host** — calling it from another whitelisted page fails with `[]`; (3) the app must be **verified** or the user must have granted it `ASSETS:READ` via OAuth (`GET /authorizations?app=` is consulted live). Use to pre-select payment asset.
-- **Action proofs**: `getTipAddress` / `tipSign` produce chain-scoped TIP addresses/signatures — ⚠️ iOS v6.3.4 **always rejects both with empty strings** (verified `WebViewMessageHandler`); Android/Desktop may still honor them, but do not build a product path on them today. Prefer OAuth + server-side TIP flows instead.
+- **Balance proofs**: `getAssets(ids, cb)` returns the user's balances for chosen assets — but mobile gates it (verified from `MixinWebViewController.reportAssetsIfVerified` ios-app and `WebFragment.getAssets` android-app): (1) every id must be a uuid (an **empty list returns the full token list** on Android/iOS); (2) the **current page's host must equal the app's Home URL host** — calling it from another whitelisted page fails with `[]`; (3) the app must be **verified** or the user must have granted it `ASSETS:READ` via OAuth (`GET /authorizations?app=` is consulted live). Desktop has no such bridge at all.
+- **Action proofs**: `getTipAddress` / `tipSign` work **only on Android** (TIP authorization sheet; signature is secp256k1 hex). iOS v6.3.4 always rejects with empty strings; Desktop has neither bridge. Never make them the only path — wrap with OAuth + server-side TIP flows for iOS/Desktop users.
 
 ## Verify it worked
 
@@ -90,6 +95,8 @@ Keep using the SDK wrapper rather than poking `window.webkit` yourself — it al
 
 - node: `@mixin.dev/mixin-node-sdk` 7.6.0 — `dist/index.d.ts` (WebViewApi, Context, WebviewAsset, window bridges), `dist/index.js` (WebViewApi implementation, prompt/callback plumbing)
 - iOS client: MixinNetwork/ios-app master @ 2026-10-17 (v6.3.4) — `WebViewMessageHandler.swift` (bridge inventory, TIP rejection, signBotSignature), `MixinWebViewController.swift` (getAssets gating, prompt plumbing), `MixinWebContext.swift` (context payload, IMMERSIVE, UA)
+- Android client: MixinNetwork/android-app master @ 2026-10-17 — `WebFragment.kt` (`WebAppInterface` full bridge incl. getTipAddress/tipSign/verifyPin/showToast, getAssets gating, botSign)
+- Desktop client: MixinNetwork/flutter-app main @ 2026-10-16 (v6.3.1) — `web_view_desktop.dart` (context-only injection, UA)
 - docs: app/getting-started/create-app.md (Home URL, Resource Patterns, Immersive)
 - docs: app/design/{overview,title-bar,dark-mode,immersive-mode,floating-menu,color,sticker,user-interaction}.md (HEAD 2026-10-05)
 - go: bot-api-go-client v3.25.7 blaze.go `SendAppCard`; APP_CARD payload limits → messaging.md

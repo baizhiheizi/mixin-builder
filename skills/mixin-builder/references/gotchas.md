@@ -124,7 +124,7 @@ Ordered by how often they bite (16–19 added 2026-10-12/13, not yet ranked). Ea
 
 **Symptom:** a bot that worked on `PLAIN_*` starts receiving `ENCRYPTED_TEXT`/`ENCRYPTED_IMAGE`…; `data_base64` no longer decodes to readable payloads.
 **Cause:** the app dashboard was granted the `ENCRYPTED` capability — Messenger then sends user→bot messages as `ENCRYPTED_*` (session-encrypted) instead of `PLAIN_*` (verified ios-app@master `SendMessageService+Sending.swift`). The capability is opted into per app, often without realizing the inbox contract changes with it.
-**Fix:** either implement the encrypted-message pipeline (messaging.md §5: `POST /sessions/fetch`, ECDH per-session keys, AES-CBC body) or have the capability removed. Same family: `GROUP` capability routes group `@700xxxx ` text to the bot directly. Check `capabilities` on the app object — note the API JSON key is misspelled **`capabilites`**.
+**Fix:** either implement the encrypted-message pipeline (messaging.md §5: `POST /sessions/fetch`, ECDH per-session keys, AES-CBC body) or have the capability removed. Same family: `GROUP` capability routes group `@700xxxx ` text to the bot directly. When reading the app object over raw REST, accept **both** `capabilites` (the wire key — iOS + official Dart SDK) and `capabilities` (modern Android VO).
 
 ## 21. APP_CARD silently renders nothing — missing `shareable` in new-style cards
 

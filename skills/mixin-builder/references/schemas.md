@@ -26,7 +26,7 @@ Verified Go helpers (go: url_scheme.go v3.25.7; all build query-encoded URLs —
 | `mixin://send?category=&data=&conversation=` | `SchemeSend(category, data, conversationID)` | share sheet; categories: `text, image, contact, app_card, live, post` (iOS also `sticker`, plus a `?text=…` raw-text shortcut and `user=` as destination); `data` = base64 (StdEncoding) of payload, itself query-escaped before encoding |
 | `mixin://apps/{appID}?action=open&k=v…` | `SchemeApps(appID, action, params)` | bot homepage with arbitrary params (invite codes etc.); with no/other `action` iOS opens the bot **profile** instead |
 | `mixin://codes/{code_id}` | `SchemeCodes(codeId)` | code info popup (also QR login → identity-and-keys.md) |
-| `mixin://conversations/{id}?user=` | `SchemeConversations(conversationID, userID)` | open conversation; creates it if absent |
+| `mixin://conversations/{id}?user=&start=` | `SchemeConversations(conversationID, userID)` | open conversation; creates it if absent. `start=<text>` pre-fills **and auto-sends** the text on Android/Desktop (iOS ignores `start`) |
 | `mixin://snapshots/{snapshotId}` (+ `trace=`) | `SchemeSnapshots(snapshotId, traceId)` | snapshot detail |
 
 Node/Ruby: no per-link builders in the Node SDK's helper set (only `buildMixinOneSafePaymentUri`); Ruby has `MixinBot::UrlScheme`. Use the query table above.
@@ -40,8 +40,8 @@ A second, newer family: scheme `mixin` **or** `https` with host exactly `mixin.o
 | Link | Shape |
 |---|---|
 | `mixin://mixin.one/pay/{address}?asset=&amount=&trace=&memo=&return_to=&reference=&inscription=&inscription_collection=` | same parser as §2 web pay; `{address}` = user uuid / XIN mainnet / MIX / **MIN invoice string**; `amount` ≤ 8 fractional digits and > 0; `trace` defaults to a fresh uuid client-side |
-| `mixin://mixin.one/multisigs/{request_id}?action=` | multisig sign/revoke sheet → payments.md; `action` = `sign` (default when omitted) \| `revoke` or `unlock` (both revoke); `request_id` must be a lowercased uuid; opener must be one of the request's `senders` |
-| `mixin://mixin.one/schemes/{scheme_id}` | code popup (lowercased uuid) — path twin of `mixin://codes/{id}` |
+| `mixin://mixin.one/multisigs/{request_id}?action=` | multisig sign/revoke sheet → payments.md; `action` = `sign` (default when omitted) \| `revoke` or `unlock` (both revoke); `request_id` must be a lowercased uuid; opener must be one of the request's `senders`. ⚠️ Desktop shows an "unknown link" dialog instead (no multisig UI from links) |
+| `mixin://mixin.one/scheme/{scheme_id}` **(Android, singular)** or `/schemes/{scheme_id}` **(iOS, plural)** | code popup (lowercased uuid). Android resolves the scheme server-side then re-dispatches to its `target` URL; the two spellings are **not interchangeable** — for cross-platform use the host-style `mixin://codes/{id}` |
 | `mixin://mixin.one/tip/sign?chain=&action=&raw=&request_id=` | TIP sign request; `chain` must be `solana`, `action` must be `signRawTransaction`, `raw` required, `request_id` optional uuid |
 | `mixin://mixin.one/swap` or `/trade?type=&input=&output=&referral=` | trade UI; `type` = `swap` \| `limit` \| `perps` (absent → default trading mode); perps: `market` required, then `action=open` (+ `side`, `leverage`, `margin`, `leader_position`) \| `action=add_margin` (+ `margin`) \| no action → market detail |
 | `mixin://mixin.one/send?…` | share sheet — same params as `mixin://send` |
@@ -51,7 +51,30 @@ A second, newer family: scheme `mixin` **or** `https` with host exactly `mixin.o
 | `mixin://mixin.one/markets/{id}` | market detail |
 | `mixin://mixin.one/codes/{code_id}` · `/users/{uuid}` · `/transfer/{uuid}` · `/conversations/{id}?user=` · `/apps/{id}` · `/address` · `/wc?uri=` · `/buy` | path-forms of §1 links, same behavior |
 
-iOS quirk: `mixin://mixin.one/snapshots/{snapshotId}` parses but the handler reads the wrong path component, so the **id is ignored** — only `?trace=` works there. Use the §1 host-style `mixin://snapshots/{snapshotId}` (id works) or a `trace=` query on either form.
+iOS quirk: `mixin://mixin.one/snapshots/{snapshotId}` parses but the handler reads the wrong path component, so the **id is ignored** — only `?trace=` works there. Cross-platform snapshot-link matrix (verified against all three clients):
+
+| Form | iOS | Android | Desktop |
+|---|---|---|---|
+| `mixin://snapshots/{id}` | ✅ id works | ✅ id works (`lastPathSegment`) | ❌ trace only |
+| `mixin://snapshots?trace=` / any form + `trace=` | ✅ | ✅ (trace checked first) | ✅ |
+
+**Prefer `trace` in product QRs/links** — it is the only form that works everywhere.
+
+### Platform divergence cheat-sheet (audited: ios-app v6.3.4, android-app@master 2026-10-17, flutter-app v6.3.1 desktop)
+
+| Link | iOS | Android | Desktop (Flutter) |
+|---|---|---|---|
+| `/multisigs/{id}` sheet | ✅ | ✅ (same action semantics: default sign, `unlock`→revoke) | ❌ unknown-link dialog |
+| `/pay/{address}` payment | ✅ | ✅ (uuid / XIN / MIX / MIN invoice via `newSchemeParser`) | ❌ unknown-link dialog |
+| `/swap`, `/trade` | ✅ | ✅ (path-form only) | ❌ unknown-link dialog |
+| `/markets/{id}`, `/membership` | ✅ | markets ✅ (path-form only; membership ❌) | ❌ unknown-link dialog |
+| `/schemes` code popup | ✅ plural | ✅ **singular** `/scheme/` | ❌ |
+| `/tip/sign` (solana raw) | ✅ | ✅ (+ posts result `{request_id, sig}` back into the conversation as a text message) | ❌ |
+| `mixin://tip/{public\|sign}?id=&alg=&crv=&data=&notify=` | ❌ | ✅ TIPNode protocol: action `public`\|`sign`; `alg`+`crv` = `ecdsa`/`secp256k1` or `eddsa`/`ed25519`; `data` base64url (sign only); result POSTed to `notify` endpoint (default `https://api.mixin.one/tip/notify`) as `?id=&res=` | ❌ |
+| `mixin://info` | ❌ | ✅ device/debug info dialog | ❌ |
+| `mixin://codes/{id}` | ✅ | ✅ (resolves User/Conversation/PaymentCode/Multisig) | ✅ (same union) |
+
+Rule: **money/trading links work on phones only**; for QRs intended to be scanned on desktop, generate `https://mixin.one/pay/...` web pages instead of app schemes.
 
 ## 2. Web pay URIs — `https://mixin.one/pay/{address}`
 
@@ -151,5 +174,7 @@ Domain rule: treat every deep link you *emit* as a serializer (encode) and every
 - go: url_scheme.go, mix.go, invoice.go v3.25.7
 - node: dist/index.d.ts + dist/index.js 7.6.0 (`buildMixinOneSafePaymentUri`, PaymentParams, CodeClient.schemes `/schemes`, invoice helpers)
 - iOS client: MixinNetwork/ios-app master @ 2026-10-17 (v6.3.4, build 843) — `Mixin/Constants/MixinURL.swift`, `Mixin/UserInterface/Controllers/Wallet/Payment/{SafeURL,SafePaymentURL,MultisigURL,TIPURL,TradeURL,CodeURL}.swift`, `Mixin/Service/Message/ExternalSharingContext.swift`, dispatch in `Mixin/UserInterface/Windows/UrlWindow.swift`, Info.plist (registers only `mixin`)
+- Android client: MixinNetwork/android-app master @ 2026-10-17 — `UrlInterpreterActivity.kt`, `LinkBottomSheetDialogFragment.kt` (multisig/tip/scheme/snapshot parsing), `Constants.kt` Scheme object, `extension/UrlExtension.kt`
+- Desktop client: MixinNetwork/flutter-app main @ 2026-10-16 (v6.3.1) — `utils/uri_utils.dart` (router + Uri extensions), `constants.dart` MixinSchemeHost
 - docs: schema deep-link sections referenced by Go doc comments (developers.mixin.one/docs/schema)
-- SDK parts verified 2026-10-11; deep-link surface re-verified against the iOS client 2026-10-17 (→ compatibility.md)
+- SDK parts verified 2026-10-11; deep-link surface verified against iOS/Android/Desktop clients 2026-10-17 (→ compatibility.md)
