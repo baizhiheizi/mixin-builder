@@ -40,6 +40,18 @@ cp -r skills/mixin-builder ~/.agents/skills/   # 也可以是 .claude/skills/、
 
 任何涉及资金移动的请求都需要确认（`SKILL.md` 护栏 #7）：Agent 会展示资产（`asset_id`，而不只是符号）、金额、收款方和 trace，得到你的明确同意后才签名。
 
+### 命令
+
+针对重复性工作流，技能在 [`commands/`](skills/mixin-builder/commands/) 里附带五个斜杠命令提示词。复制进你 Agent 的命令目录（`.claude/commands/`、`~/.config/opencode/command/` 等），即可用 `/mixin-*` 调用：
+
+| 命令 | 作用 |
+|---|---|
+| `/mixin-audit` | 审计当前项目的 Mixin API 用法 —— 编造的 SDK 符号、安全护栏违规、错误处理、对账模式 —— 按严重程度列出发现，附文件:行号 |
+| `/mixin-fit` | 分析当前产品，映射到合适的 Mixin 能力：现在用/以后用什么、读什么、从哪个脚手架起步、按什么顺序构建 |
+| `/mixin-probe` | 只读实测：注册状态（`has_safe`）、精确余额、账本分页语义 |
+| `/mixin-drift` | 把项目已安装的 SDK 版本与技能的已验证矩阵比对；版本不同处重新读取已安装源码 |
+| `/mixin-error <错误码\|症状>` | 查错误码或症状（错误码 → 原因 → 修复），然后在代码库里定位引发问题的模式 |
+
 ## 直接运行工具
 
 脚手架和脚本都是朴素、少依赖的文件 —— 可以当示例读，也可以脱离 Agent 直接跑。环境要求：`scripts/` 需 Node ≥ 20（零 npm 依赖）· 监听器需 Node ≥ 22（`node:sqlite`）· Go ≥ 1.27 · Ruby ≥ 4.0。
@@ -122,6 +134,7 @@ node $SKILL/scripts/probe.mjs snapshot <id> --keystore ks.json
 ```
 skills/mixin-builder/
 ├── SKILL.md            # 入口：模型、安全护栏、路由、SDK 规则、时效块
+├── commands/           # 5 个可选斜杠命令提示词（audit / fit / probe / drift / error）
 ├── references/         # 15 个领域文件（见上表）
 ├── scripts/
 │   ├── check-currency.mjs   # 版本 + 导出面 + 脚手架审计（漂移时退出码 ≠ 0）

@@ -40,6 +40,18 @@ Prompts like these work as-is:
 
 Requests that move money require confirmation (`SKILL.md` rail #7): the agent shows asset (`asset_id`, not just the symbol), amount, destination, and trace, and waits for your explicit yes before signing.
 
+### Commands
+
+For repeated workflows, the skill ships five slash-command prompts in [`commands/`](skills/mixin-builder/commands/). Copy them into your agent's command directory (`.claude/commands/`, `~/.config/opencode/command/`, …) to use as `/mixin-*`:
+
+| Command | What it does |
+|---|---|
+| `/mixin-audit` | Audit the project's Mixin API usage — fabricated SDK symbols, safety-rail violations, error handling, reconciliation patterns — with findings by severity and file:line |
+| `/mixin-fit` | Analyze the current product and map it onto Mixin capabilities: what to use now/later, what to read, what to scaffold, in what order |
+| `/mixin-probe` | Ground live facts read-only: registration state (`has_safe`), exact balances, ledger paging semantics |
+| `/mixin-drift` | Compare the project's installed SDK versions against the skill's verified matrix; re-read installed source where they differ |
+| `/mixin-error <code\|symptom>` | Look up an error code or symptom (code → cause → fix), then locate the causing pattern in the codebase |
+
 ## Run the tools directly
 
 The scaffolds and scripts are plain, dependency-light files — readable as examples, runnable without an agent. Requirements: Node ≥ 20 for `scripts/` (zero npm deps) · Node ≥ 22 for the watcher (`node:sqlite`) · Go ≥ 1.27 · Ruby ≥ 4.0.
@@ -122,6 +134,7 @@ Full verified-against matrix and re-verify instructions: [`references/compatibil
 ```
 skills/mixin-builder/
 ├── SKILL.md            # entry point: model, safety rails, routing, SDK rule, currency block
+├── commands/           # 5 optional slash-command prompts (audit / fit / probe / drift / error)
 ├── references/         # 15 domain files (see table above)
 ├── scripts/
 │   ├── check-currency.mjs   # version + export-surface + scaffold audit (exit ≠ 0 on drift)

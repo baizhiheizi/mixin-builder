@@ -70,6 +70,16 @@ Each rail exists because skipping it loses money or floods the network. Expanded
 | An error code / failure symptom | `common-errors.md`, `gotchas.md` | — |
 | Which SDK call / file for topic X in language Y | `sdk-map.md` | — |
 
+## Commands (optional, for harnesses that support slash commands)
+
+Prompt files live in `commands/` — copy them into `.claude/commands/` (or your agent's equivalent) to use as `/mixin-*`:
+
+- `/mixin-audit` — audit the project's Mixin API usage: fabricated symbols, safety rails, error handling, reconciliation
+- `/mixin-fit` — map the product onto Mixin capabilities: what to use, read, scaffold
+- `/mixin-probe` — ground live facts read-only: registration, balances, paging
+- `/mixin-drift` — installed SDK versions vs the verified matrix
+- `/mixin-error <code|symptom>` — error lookup + locate the causing pattern in code
+
 ## SDK resolution rule (anti-hallucination)
 
 Mixin skills historically died by inventing SDK symbols (~25 fabricated Go function names in one audited set). Therefore:
