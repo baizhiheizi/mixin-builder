@@ -2,13 +2,13 @@
 
 [English](README.md) | **简体中文**
 
-一个深度 Agent 技能，用于在 Mixin 网络上构建应用 —— Messenger 机器人、带 Mixin 登录的 Web 应用、Safe/UTXO 支付与托管、Mixin Computer（Solana）调用，以及 MTG 可信组程序。
+一个 Agent 技能，用于在 Mixin 网络上构建产品 —— Messenger 机器人、带 Mixin 登录的 Web 应用、Safe/UTXO 支付与托管、Mixin Computer（Solana）调用，以及 MTG 可信组程序。
 
-协议事实优先于 SDK 转述，踩坑实录优先于 API 罗列。每一个有副作用的流程，最后都会告诉你**如何验证它确实生效了**。
+协议论断均对照锁定版本的 SDK 源码验证并注明日期。每一个有副作用的流程都以**如何验证它生效**收尾。
 
-两种用法：[跟你的 Agent 聊着管理一个机器人钱包](#不写代码管理机器人钱包)，全程零代码；或者[基于脚手架和参考文档开发](#快速开始)。
+这是一个 Agent 技能：装进你的 Agent，然后通过对话来构建。[通过你的 Agent 构建](#通过你的-agent-构建)是主路径；想动手的直接[运行工具](#直接运行工具)；[管理机器人钱包](#不写代码管理机器人钱包)则完全不需要写代码。
 
-## 安装
+## 安装（装进你的 Agent）
 
 ```bash
 # 从 GitHub 安装（skills CLI）
@@ -16,58 +16,59 @@ npx skills add baizhiheizi/mixin-builder
 
 # 或手动：把技能目录复制进你的 Agent 的技能目录
 cp -r skills/mixin-builder ~/.agents/skills/   # 也可以是 .claude/skills/、.codex/skills/ 等
-
-# 或直接克隆仓库（下方快速开始以此为准）
-git clone https://github.com/baizhiheizi/mixin-builder.git
 ```
 
-无需构建。各部分的环境要求：
+无需构建。Claude Code、Codex、opencode 以及任何兼容 skills 的 Agent 都可用。
 
-| 部分 | 要求 |
+## 通过你的 Agent 构建
+
+在你的项目里打开 Agent，直接描述你要构建的东西。技能会让 Agent 路由到相关参考文档、从脚手架起步、用只读探针读取实时事实，并执行安全护栏：先 dry-run 再产生实际效果，签名前需获得你的明确确认。
+
+先准备一个文件：keystore。在[开发者面板](https://developers.mixin.one)创建应用 → 你的应用 → **Secret** → 生成 `keystore.json`。务必保密 —— 谁持有其中的 `spend_private_key`，谁就持有这笔钱。
+
+下面这些提示词可以直接用：
+
+| 你说 | Agent 会做什么 |
 |---|---|
-| `scripts/` —— 探针、时效性审计 | Node ≥ 20，零 npm 依赖 |
-| Echo 机器人脚手架 | Node ≥ 20 · 或 Go ≥ 1.27（`go run .`）· 或 Ruby ≥ 4.0 |
-| 支付监听脚手架 | **Node ≥ 22**（用到 `node:sqlite`） |
-| OAuth Web 脚手架 | Node ≥ 20，零依赖 |
+| “用 Node 给我做一个 Mixin Messenger 机器人，keystore 在 `~/ks.json`。” | 从 `assets/scaffold-bot-echo/node` 起步 —— Blaze 连接、处理完才 ACK、重连退避 —— 把回复逻辑改成你的产品需要的样子，跑起来，然后和你一起验证：发 `/ping` 收到恰好一条 `echo: /ping`，`kill -9` 重启后依然恰好一条。 |
+| “我的 Web 应用需要 Mixin 登录。” | 按 `references/identity-and-keys.md` 执行：带 PKCE 的 OAuth、选择 scope、在服务端完成 code 换 token。从 `assets/scaffold-oauth-web` 起步，client secret 绝不进浏览器。 |
+| “我的商店用 USDT 卖课程 —— 收款并给订单入账。” | 按 `references/payments.md` + `reconciliation.md` 执行：锁定 `asset_id`（同一符号 ≠ 同一资产）、每个订单用稳定的 `trace_id` 签发支付链接、按 `snapshot_id` 只入账一次（基于 `assets/scaffold-payment-watcher`）、先 dry-run；处理少付/多付和退款。 |
+| “给 `bc1q…` 转 0.01 BTC” | 金额用十进制字符串、`trace_id` 保持稳定、先通过 `/safe/transaction/requests` 免费验证原始交易，**经你确认**资产/金额/收款方/trace 后才签名，随后轮询到 `spent` 并把快照作为凭证展示给你。 |
+| “我懂 Solidity —— Mixin 和它有什么不同？” | `references/concepts.md`：把 kernel / sequencer / Safe / Blaze 映射到 EVM 概念，UTXO 对比账户模型，为什么没有 gas。 |
+| “我的机器人 Blaze 连接报 `10006 Update required`。” | `references/gotchas.md` #19：网关要求 `User-Agent: name/version`；Node SDK 的 `BlazeKeystoreClient`（7.6.0）不发这个头 —— 用脚手架的 `blaze-client.mjs`。 |
+| “错误码 `30102` 是什么意思？” | `references/common-errors.md`：错误码 → 最可能的原因 → 修复。 |
 
-## 快速开始
+任何涉及资金移动的请求都需要确认（`SKILL.md` 护栏 #7）：Agent 会展示资产（`asset_id`，而不只是符号）、金额、收款方和 trace，得到你的明确同意后才签名。
 
-先准备一个文件：机器人的 `keystore.json`。在[开发者面板](https://developers.mixin.one)创建应用 → 你的应用 → **Secret** → 生成 keystore。务必保密 —— 谁持有其中的 `spend_private_key`，谁就持有这笔钱。
+## 直接运行工具
 
-挑一个脚手架，跑起来：
+脚手架和脚本都是朴素、少依赖的文件 —— 可以当示例读，也可以脱离 Agent 直接跑。环境要求：`scripts/` 需 Node ≥ 20（零 npm 依赖）· 监听器需 Node ≥ 22（`node:sqlite`）· Go ≥ 1.27 · Ruby ≥ 4.0。
 
 ```bash
-SKILL=skills/mixin-builder   # 仓库克隆；若通过 skills CLI 安装：SKILL=~/.agents/skills/mixin-builder
+git clone https://github.com/baizhiheizi/mixin-builder.git && cd mixin-builder
+SKILL=skills/mixin-builder
 
-# echo 机器人 —— Blaze 消息、ACK 语义、重连退避（Node / Go / Ruby）
-cd $SKILL/assets/scaffold-bot-echo/node
-npm install && KEYSTORE=/path/to/keystore.json node index.mjs
-# Go:    cd ../go    && KEYSTORE=… go run .
-# Ruby:  cd ../ruby  && bundle install && KEYSTORE=… ruby echo.rb   # 需要 Ruby ≥ 4.0
+# echo 机器人（node/ go/ ruby/）—— Blaze 消息、ACK 语义、重连退避
+cd $SKILL/assets/scaffold-bot-echo/node && npm install
+KEYSTORE=/path/to/keystore.json node index.mjs    # 验证：/ping → 恰好一条 echo，kill -9 重启后依然如此
 
-# 支付监听 —— Blaze 触发 + /safe/snapshots 对账，只入账一次的账本
-cd ../../scaffold-payment-watcher
-npm install && KEYSTORE=/path/to/keystore.json node watcher.mjs
-#   默认 dry-run（只打印将入账的内容）；确认无误后再加 --no-dry-run
+# 支付监听 —— Blaze 触发 + /safe/snapshots 对账，只入账一次
+cd ../../scaffold-payment-watcher && npm install
+KEYSTORE=/path/to/keystore.json node watcher.mjs  # 默认 dry-run；输出确认无误后才加 --no-dry-run
 
 # OAuth Web 登录 —— 跳转授权 + code 换 token + 读取资料（零依赖）
 cd ../scaffold-oauth-web
 MIXIN_APP_ID=… MIXIN_CLIENT_SECRET=… PORT=3000 node server.mjs
+
+# 只读实时探针（只发 GET；绝不读取支付私钥）
+node $SKILL/scripts/probe.mjs computer                       # Mixin Computer 信息（无需鉴权）
+node $SKILL/scripts/probe.mjs me --keystore ks.json          # 鉴权 + Safe 注册状态
+node $SKILL/scripts/probe.mjs outputs --keystore ks.json     # 精确余额，全分页
+node $SKILL/scripts/probe.mjs snapshots --keystore ks.json   # 近期账本 + 分页语义检查
+node $SKILL/scripts/probe.mjs snapshot <id> --keystore ks.json
 ```
 
-验证 echo 机器人：在 Messenger 里给你的机器人发 `/ping` → 你会收到恰好一条 `echo: /ping`。杀掉进程、再发一条消息、重启 → 仍然恰好一条回复（确定性 `message_id` 对重投消息去重）。
-
-用实测代替轻信文档 —— 所有探针均为只读（只发 GET；绝不读取支付私钥）：
-
-```bash
-node $SKILL/scripts/probe.mjs computer                                # Mixin Computer 信息（无需鉴权）
-node $SKILL/scripts/probe.mjs me --keystore ks.json                   # 鉴权 + Safe 注册状态
-node $SKILL/scripts/probe.mjs outputs --keystore ks.json              # 精确余额，全分页
-node $SKILL/scripts/probe.mjs snapshots --keystore ks.json            # 近期账本 + 分页语义检查
-node $SKILL/scripts/probe.mjs snapshot <snapshot_id> --keystore ks.json
-```
-
-注意：Node SDK 自带的 `BlazeKeystoreClient`（7.6.0）连不上 —— 它不发送 `User-Agent`，握手收到 `10006` 后静默挂死。脚手架内置了可用的替代实现（`blaze-client.mjs`）；任何手写 HTTP 客户端也必须带 `User-Agent: name/version` 请求头。
+注意：如果不用脚手架、自己写客户端，每个 HTTP 请求和 Blaze 握手都必须带 `User-Agent: name/version` 请求头 —— 否则 API 返回 `10006 Update required`（→ `references/gotchas.md` #19）。
 
 ## 不写代码管理机器人钱包
 
@@ -102,19 +103,17 @@ node $SKILL/scripts/probe.mjs snapshot <snapshot_id> --keystore ks.json
 | MTG 可信组 | [`references/mtg.md`](skills/mixin-builder/references/mtg.md) | observer/signer/worker、确定性规则、阈值、FROST |
 | 机器人即应用 | [`references/webview.md`](skills/mixin-builder/references/webview.md) | 卡片 → webview 交接、JS 桥（iOS/Android/桌面端差异）、设计惯例 |
 | 链接与编码 | [`references/schemas.md`](skills/mixin-builder/references/schemas.md) | `mixin://` 各系列（已对照三个 Messenger 客户端逐一验证）、支付 URI、MIX/MIN 地址、codes |
-| 故障速查 | [`references/gotchas.md`](skills/mixin-builder/references/gotchas.md)、[`references/common-errors.md`](skills/mixin-builder/references/common-errors.md) | 21 篇踩坑实录；每个错误码 → 原因 → 修复 |
+| 故障速查 | [`references/gotchas.md`](skills/mixin-builder/references/gotchas.md)、[`references/common-errors.md`](skills/mixin-builder/references/common-errors.md) | 21 个失败案例；每个错误码 → 原因 → 修复 |
 | SDK 导航 | [`references/sdk-map.md`](skills/mixin-builder/references/sdk-map.md) | 每个主题、每种语言对应的权威源码文件 |
-| 事实锚点 | [`references/compatibility.md`](skills/mixin-builder/references/compatibility.md) | 已验证版本矩阵 + 重新验证步骤 |
+| 验证记录 | [`references/compatibility.md`](skills/mixin-builder/references/compatibility.md) | 已验证版本矩阵 + 重新验证步骤 |
 
-## 它如何保持可信
+## 内容如何保持准确
 
-历史上的 Mixin 技能大多死于凭空编造 SDK 符号。这个技能从构造上杜绝了这种情况：
-
-- **从构造上防幻觉** —— 任何 SDK 符号只有读过锁定版本的源码才会出现在内容里（Go `bot-api-go-client/v3` v3.25.7 · Node `@mixin.dev/mixin-node-sdk` 7.6.0 · Ruby `mixin_bot` 3.0.2 · `safe` v0.28.2 · `multi-party-sig` v0.7.0 · 文档仓库 HEAD · kernel `MixinNetwork/mixin）。无法验证的内容一律内联标注 `[UNVERIFIED]`。
-- **解析而非回忆** —— `references/sdk-map.md` 为每个主题指明确切的源码文件；Agent 被要求在产出代码前先读*已安装的* SDK，实在不行回退到文档化的 REST 调用。
-- **自动漂移告警** —— `scripts/check-currency.mjs` 检查最新 SDK 版本、对照 `scripts/baseline.json` 比对导出符号面、对每个脚手架做语法检查，并通过 GitHub compare API 跟踪四个 Mixin 一方仓库（ios-app、android-app、flutter-app、mixin_bot_sdk_dart）—— 只有当提交触碰到技能引用的受监视文件时才算漂移。退出码非零 = 漂移；人工复核后用 `--update` 重建基线。
-- **每周由 Agent 复审仓库** —— 一个定时 GitHub workflow 会运行上述检查、刷新验证日期，一旦发现漂移就自动开 PR。事实锚点是持续维护出来的，不是一句口号。
-- **实时探针优先于过期数字** —— 易变的事实（Computer 注册价格、成员数/阈值、你的注册状态）在使用时通过 `scripts/probe.mjs` 实测，绝不照抄文档。
+- 内容中出现的任何 SDK 符号都读自锁定版本的源码（Go `bot-api-go-client/v3` v3.25.7 · Node `@mixin.dev/mixin-node-sdk` 7.6.0 · Ruby `mixin_bot` 3.0.2 · `safe` v0.28.2 · `multi-party-sig` v0.7.0 · 文档仓库 HEAD · kernel `MixinNetwork/mixin`）。无法验证的内容内联标注 `[UNVERIFIED]`。
+- `references/sdk-map.md` 为每个主题指明各语言对应的确切源码文件；Agent 被要求在产出代码前先读*已安装的* SDK，必要时回退到文档化的 REST 调用。
+- `scripts/check-currency.mjs` 检查最新 SDK 版本、对照 `scripts/baseline.json` 比对导出符号面、对每个脚手架做语法检查，并通过 GitHub compare API 跟踪四个 Mixin 一方仓库（ios-app、android-app、flutter-app、mixin_bot_sdk_dart）—— 只有当提交触碰到技能引用的受监视文件时才报告漂移。退出码非零即漂移；人工复核后用 `--update` 重建基线。
+- 一个定时 GitHub workflow 每周运行这些检查，刷新验证日期，发现漂移即提交 PR。
+- 易变的事实（Computer 注册价格、成员数/阈值、你的注册状态）在使用时通过 `scripts/probe.mjs` 实测，不照抄文档。
 
 完整的已验证矩阵和重新验证步骤：[`references/compatibility.md`](skills/mixin-builder/references/compatibility.md)。
 
@@ -137,7 +136,7 @@ skills/mixin-builder/
 
 ## 不覆盖的内容
 
-Messenger 终端用户支持 · 行情/价格内容 · 复制官方 API 文档（它已经很好 —— [developers.mixin.one](https://developers.mixin.one)）· fox-one/4swap/Exin 生态（仅给指引）· 在 `SKILL.md` 内自动更新 SDK 代码片段。
+Messenger 终端用户支持 · 行情/价格内容 · 复制官方 API 文档（[developers.mixin.one](https://developers.mixin.one)）· fox-one/4swap/Exin 生态（仅给指引）· 在 `SKILL.md` 内自动更新 SDK 代码片段。
 
 ## 贡献
 
